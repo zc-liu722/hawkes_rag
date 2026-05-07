@@ -12,7 +12,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from hawkes_rag.core import Event, HawkesParams, diagonal_only
+from hawkes_rag.core import Event, HawkesParams, MultivariateHawkesProcess, diagonal_only
+from hawkes_rag.embeddings import EmbeddingFn, make_embedding_fn
 from hawkes_rag.estimation import LowRankHawkesEstimator
 from hawkes_rag.evaluation import heldout_predictive_log_likelihood
 from hawkes_rag.locomo import (
@@ -23,26 +24,43 @@ from hawkes_rag.locomo import (
     LoCoMoEventizer,
     load_official_locomo10_json,
 )
-from hawkes_rag.utils import pairwise_cosine
+from hawkes_rag.utils import cosine_similarity, pairwise_cosine
+
+
+EVENTIZED_SCHEMA = "hawkes_rag.eventized_locomo.v2"
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Hawkes-RAG on the official LoCoMo corpus.")
     parser.add_argument("--data", type=Path, default=Path("benchmarks/locomo/cache/locomo10.json"))
-    parser.add_argument("--eventized-cache", type=Path, default=Path("outputs/locomo_eventized.json"))
+    parser.add_argument("--eventized-cache", type=Path, default=None)
     parser.add_argument("--outputs-dir", type=Path, default=Path("outputs"))
     parser.add_argument("--train-fraction", type=float, default=0.8)
     parser.add_argument("--rank", type=int, default=4)
     parser.add_argument("--max-iter", type=int, default=80)
-    parser.add_argument("--fit-mle", action="store_true", help="Run low-rank MLE instead of the fast stable similarity-alpha default.")
+    parser.add_argument(
+        "--fit-mle",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Run low-rank MLE; use --no-fit-mle for the stable similarity-alpha fallback.",
+    )
+    parser.add_argument(
+        "--embedding",
+        choices=["hashing", "minilm", "bge"],
+        default="minilm",
+        help="Embedding backend for eventization and retrieval queries.",
+    )
     parser.add_argument(
         "--max-facts",
         type=int,
-        default=80,
-        help="Fit/evaluate the first N eventized facts for a practical default; use 0 for full corpus.",
+        default=0,
+        help="Fit/evaluate the first N eventized facts; 0 means full corpus.",
     )
+    parser.add_argument("--bootstrap-samples", type=int, default=1000)
     parser.add_argument("--refresh-cache", action="store_true")
     args = parser.parse_args()
+    if args.eventized_cache is None:
+        args.eventized_cache = Path(f"outputs/locomo_eventized_{args.embedding}.json")
 
     if not args.data.exists():
         raise SystemExit(
@@ -51,12 +69,14 @@ def main() -> None:
     args.outputs_dir.mkdir(parents=True, exist_ok=True)
     args.eventized_cache.parent.mkdir(parents=True, exist_ok=True)
 
+    embedding_fn = make_embedding_fn(args.embedding)
+
     if args.eventized_cache.exists() and not args.refresh_cache:
         corpus = read_eventized_corpus(args.eventized_cache)
         cache_status = "loaded"
     else:
         conversations = load_official_locomo10_json(args.data)
-        corpus = LoCoMoEventizer().eventize(conversations)
+        corpus = LoCoMoEventizer(embedding_fn=embedding_fn).eventize(conversations)
         write_eventized_corpus(corpus, args.eventized_cache)
         cache_status = "written"
 
@@ -94,7 +114,7 @@ def main() -> None:
             "mode": "stable_similarity_alpha",
             "success": True,
             "objective": None,
-            "message": "MLE skipped; pass --fit-mle for optimizer-based fitting",
+            "message": "MLE skipped via --no-fit-mle",
             "n_iter": 0,
             "rank": None,
             "beta": full_params.beta,
@@ -102,14 +122,33 @@ def main() -> None:
 
     splits = corpus.heldout_splits(args.train_fraction)
     full_pll = heldout_predictive_log_likelihood(full_params, splits)
-    diagonal_pll = heldout_predictive_log_likelihood(diagonal_only(full_params), splits)
+    diagonal_params = diagonal_only(full_params)
+    diagonal_pll = heldout_predictive_log_likelihood(diagonal_params, splits)
+    naive_params = HawkesParams(
+        mu=estimate_mu(corpus.trajectories(), corpus.horizons(), corpus.n_memories),
+        alpha=np.zeros_like(full_params.alpha),
+        beta=full_params.beta,
+    )
     naive_pll = heldout_predictive_log_likelihood(
-        HawkesParams(
-            mu=estimate_mu(corpus.trajectories(), corpus.horizons(), corpus.n_memories),
-            alpha=np.zeros_like(full_params.alpha),
-            beta=full_params.beta,
-        ),
+        naive_params,
         splits,
+    )
+    retrieval = retrieval_metrics(
+        corpus,
+        embedding_fn,
+        {
+            "naive_zero_alpha": naive_params,
+            "diagonal_alpha": diagonal_params,
+            "full_alpha": full_params,
+        },
+        train_fraction=args.train_fraction,
+    )
+    bootstrap = paired_bootstrap_delta_ci(
+        full_params,
+        diagonal_params,
+        splits,
+        samples=args.bootstrap_samples,
+        seed=0,
     )
 
     result = {
@@ -125,6 +164,7 @@ def main() -> None:
         "n_facts": corpus.n_memories,
         "n_facts_full_cache": full_corpus.n_memories,
         "max_facts": args.max_facts,
+        "embedding": args.embedding,
         "n_events": sum(len(conversation.events) for conversation in corpus.conversations),
         "n_events_full_cache": sum(
             len(conversation.events) for conversation in full_corpus.conversations
@@ -135,6 +175,8 @@ def main() -> None:
             pll_row("diagonal_alpha", diagonal_pll),
             pll_row("full_alpha", full_pll),
         ],
+        "retrieval": retrieval,
+        "paired_bootstrap": bootstrap,
     }
     (args.outputs_dir / "locomo_results.json").write_text(json.dumps(result, indent=2) + "\n")
     markdown = format_markdown(result)
@@ -160,6 +202,108 @@ def pll_row(name: str, pll) -> dict[str, Any]:
     }
 
 
+def retrieval_metrics(
+    corpus: EventizedCorpus,
+    embedding_fn: EmbeddingFn,
+    params_by_model: dict[str, HawkesParams],
+    *,
+    train_fraction: float,
+    top_ks: tuple[int, ...] = (1, 5),
+) -> list[dict[str, Any]]:
+    rows = []
+    for model, params in params_by_model.items():
+        hits = {k: 0 for k in top_ks}
+        reciprocal_ranks = []
+        n_queries = 0
+        process = MultivariateHawkesProcess(params)
+        for conversation in corpus.conversations:
+            cutoff = conversation.horizon * train_fraction
+            train_events = [event for event in conversation.events if event.time < cutoff]
+            messages_by_time = {message.timestamp: message for message in conversation.messages}
+            active_ids = set(conversation.active_memory_ids)
+            for event in conversation.events:
+                if event.time < cutoff or event.weight >= 1.0 or event.memory_id not in active_ids:
+                    continue
+                message = messages_by_time.get(event.time)
+                if message is None:
+                    continue
+                query = embedding_fn(message.text)
+                intensities = process.intensities(event.time, train_events)
+                scored = []
+                for fact in conversation.facts:
+                    if fact.source_time >= event.time:
+                        continue
+                    sim = cosine_similarity(query, fact.embedding)
+                    scored.append((float(sim * intensities[fact.id]), fact.id))
+                if not scored:
+                    continue
+                ranked_ids = [fact_id for _, fact_id in sorted(scored, reverse=True)]
+                n_queries += 1
+                for k in top_ks:
+                    if event.memory_id in ranked_ids[:k]:
+                        hits[k] += 1
+                try:
+                    rank = ranked_ids.index(event.memory_id) + 1
+                except ValueError:
+                    rank = 0
+                reciprocal_ranks.append(0.0 if rank == 0 else 1.0 / rank)
+        rows.append(
+            {
+                "model": model,
+                "queries": n_queries,
+                "recall_at_1": hits[1] / max(n_queries, 1),
+                "recall_at_5": hits[5] / max(n_queries, 1),
+                "mrr": float(np.mean(reciprocal_ranks)) if reciprocal_ranks else 0.0,
+            }
+        )
+    return rows
+
+
+def paired_bootstrap_delta_ci(
+    left: HawkesParams,
+    right: HawkesParams,
+    splits,
+    *,
+    samples: int,
+    seed: int,
+) -> dict[str, Any]:
+    deltas = []
+    for split in splits:
+        left_value = trajectory_conditional_pll(left, split)
+        right_value = trajectory_conditional_pll(right, split)
+        denom = max(len(split.test_events), 1)
+        deltas.append((left_value - right_value) / denom)
+    values = np.asarray(deltas, dtype=float)
+    rng = np.random.default_rng(seed)
+    boot = []
+    if values.size:
+        for _ in range(samples):
+            indices = rng.integers(0, values.size, size=values.size)
+            boot.append(float(np.mean(values[indices])))
+    boot_values = np.asarray(boot, dtype=float)
+    return {
+        "comparison": "full_alpha_minus_diagonal_alpha",
+        "unit": "nats_per_heldout_event",
+        "n_paired_trajectories": int(values.size),
+        "samples": int(samples),
+        "mean": float(np.mean(values)) if values.size else 0.0,
+        "std": float(np.std(boot_values, ddof=1)) if boot_values.size > 1 else 0.0,
+        "ci95_low": float(np.quantile(boot_values, 0.025)) if boot_values.size else 0.0,
+        "ci95_high": float(np.quantile(boot_values, 0.975)) if boot_values.size else 0.0,
+    }
+
+
+def trajectory_conditional_pll(params: HawkesParams, split) -> float:
+    process = MultivariateHawkesProcess(params)
+    return process.conditional_log_likelihood(
+        split.test_events,
+        start=split.train_horizon,
+        end=split.full_horizon,
+        initial_history=split.train_events,
+        active_memory_ids=split.active_memory_ids,
+    )
+
+
 def format_markdown(result: dict[str, Any]) -> str:
     lines = [
         "# LoCoMo Hawkes-RAG Run",
@@ -173,6 +317,7 @@ def format_markdown(result: dict[str, Any]) -> str:
         f"- facts: {result['n_facts']}",
         f"- facts_full_cache: {result['n_facts_full_cache']}",
         f"- max_facts: {result['max_facts']} (`0` means full corpus)",
+        f"- embedding: `{result['embedding']}`",
         f"- events: {result['n_events']}",
         f"- events_full_cache: {result['n_events_full_cache']}",
         f"- fit_mode: {result['fit']['mode']}",
@@ -186,6 +331,32 @@ def format_markdown(result: dict[str, Any]) -> str:
             f"| `{row['model']}` | {row['heldout_pll_per_event']:.3f} | "
             f"{row['heldout_pll_total']:.3f} | {row['heldout_events']} |"
         )
+    lines.extend(
+        [
+            "",
+            "| Model | Recall@1 | Recall@5 | MRR | Retrieval queries |",
+            "| --- | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for row in result["retrieval"]:
+        lines.append(
+            f"| `{row['model']}` | {row['recall_at_1']:.3f} | {row['recall_at_5']:.3f} | "
+            f"{row['mrr']:.3f} | {row['queries']} |"
+        )
+    boot = result["paired_bootstrap"]
+    lines.extend(
+        [
+            "",
+            "## Paired Bootstrap CI",
+            "",
+            f"- comparison: `{boot['comparison']}`",
+            f"- mean_delta_nats_per_event: {boot['mean']:.3f}",
+            f"- bootstrap_std: {boot['std']:.3f}",
+            f"- ci95: [{boot['ci95_low']:.3f}, {boot['ci95_high']:.3f}]",
+            f"- paired_trajectories: {boot['n_paired_trajectories']}",
+            f"- bootstrap_samples: {boot['samples']}",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -270,7 +441,7 @@ def stable_similarity_params(corpus: EventizedCorpus, embeddings: np.ndarray) ->
 
 def write_eventized_corpus(corpus: EventizedCorpus, path: Path) -> None:
     payload = {
-        "schema": "hawkes_rag.eventized_locomo.v1",
+        "schema": EVENTIZED_SCHEMA,
         "conversations": [
             {
                 "conversation_id": conversation.conversation_id,
@@ -296,7 +467,7 @@ def write_eventized_corpus(corpus: EventizedCorpus, path: Path) -> None:
 
 def read_eventized_corpus(path: Path) -> EventizedCorpus:
     payload = json.loads(path.read_text())
-    if payload.get("schema") != "hawkes_rag.eventized_locomo.v1":
+    if payload.get("schema") != EVENTIZED_SCHEMA:
         raise ValueError(f"unsupported eventized cache schema in {path}")
     conversations = []
     facts_by_id: dict[int, AtomicFact] = {}

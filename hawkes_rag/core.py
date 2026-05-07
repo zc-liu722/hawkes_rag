@@ -97,19 +97,29 @@ class MultivariateHawkesProcess:
         active = self._active_mask(active_memory_ids)
         total = float(np.sum(self.params.mu[active]) * (end - start))
         alpha_col_sums = np.sum(self.params.alpha[active, :], axis=0)
+        event_times = []
+        event_weights = []
+        event_memory_ids = []
         for event in history:
-            if not (0.0 <= event.time < end):
-                continue
-            lower = max(start, event.time)
-            upper = end
-            if upper <= lower:
-                continue
-            tail = np.exp(-self.params.beta * (lower - event.time)) - np.exp(
-                -self.params.beta * (upper - event.time)
-            )
-            total += float(
-                event.weight * alpha_col_sums[event.memory_id] * tail / self.params.beta
-            )
+            if 0.0 <= event.time < end and active[event.memory_id]:
+                event_times.append(event.time)
+                event_weights.append(event.weight)
+                event_memory_ids.append(event.memory_id)
+        if not event_times:
+            return total
+        times = np.asarray(event_times, dtype=float)
+        weights = np.asarray(event_weights, dtype=float)
+        memory_ids = np.asarray(event_memory_ids, dtype=int)
+        lower = np.maximum(start, times)
+        valid = end > lower
+        if not np.any(valid):
+            return total
+        tail = np.exp(-self.params.beta * (lower[valid] - times[valid])) - np.exp(
+            -self.params.beta * (end - times[valid])
+        )
+        total += float(
+            np.sum(weights[valid] * alpha_col_sums[memory_ids[valid]] * tail) / self.params.beta
+        )
         return total
 
     def log_likelihood(

@@ -1,20 +1,18 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable, Protocol
+from typing import Any, Iterable, Protocol
 
 import numpy as np
 
 from hawkes_rag.core import Event
+from hawkes_rag.embeddings import EmbeddingFn, HashingEmbedding, tokens
 from hawkes_rag.evaluation import HeldoutSplit, temporal_train_test_split
 from hawkes_rag.utils import cosine_similarity
-
-
-EmbeddingFn = Callable[[str], np.ndarray]
 
 
 @dataclass(frozen=True)
@@ -141,34 +139,15 @@ class SemanticReferenceDetector:
             return []
         message_embedding = self.embedding_fn(message.text)
         hits = []
-        message_tokens = set(_tokens(message.text))
+        message_tokens = set(tokens(message.text))
         for fact in candidate_facts:
             if message.timestamp <= fact.source_time:
                 continue
             sim = cosine_similarity(message_embedding, fact.embedding)
-            overlap = _jaccard(message_tokens, set(_tokens(fact.text)))
+            overlap = _jaccard(message_tokens, set(tokens(fact.text)))
             if sim >= self.similarity_threshold or overlap >= self.lexical_overlap_threshold:
                 hits.append(fact.id)
         return hits
-
-
-class HashingEmbedding:
-    """Deterministic bag-of-words hashing embedding for reproducible examples."""
-
-    def __init__(self, dim: int = 128):
-        self.dim = int(dim)
-
-    def __call__(self, text: str) -> np.ndarray:
-        vector = np.zeros(self.dim, dtype=float)
-        for token in _tokens(text):
-            digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
-            index = int.from_bytes(digest[:4], "little") % self.dim
-            sign = 1.0 if digest[4] % 2 == 0 else -1.0
-            vector[index] += sign
-        norm = np.linalg.norm(vector)
-        if norm > 0:
-            vector /= norm
-        return vector
 
 
 class LoCoMoEventizer:
@@ -354,7 +333,14 @@ def load_official_locomo10_json(path: str | Path) -> list[list[ConversationMessa
         session_numbers = _official_session_numbers(conversation)
         if not session_numbers:
             raise ValueError(f"sample {sample_id} has no session_<n> arrays")
-        for session_position, session_number in enumerate(session_numbers):
+        session_times = {
+            session_number: _parse_official_session_datetime(
+                conversation[f"session_{session_number}_date_time"]
+            )
+            for session_number in session_numbers
+        }
+        first_session_time = min(session_times.values())
+        for session_number in session_numbers:
             session_key = f"session_{session_number}"
             timestamp_key = f"{session_key}_date_time"
             turns = conversation.get(session_key)
@@ -381,7 +367,11 @@ def load_official_locomo10_json(path: str | Path) -> list[list[ConversationMessa
                         conversation_id=sample_id,
                         message_id=dia_id,
                         text=text,
-                        timestamp=float(session_position * 1000 + turn_index),
+                        timestamp=_session_relative_days(
+                            session_times[session_number],
+                            first_session_time,
+                            turn_index,
+                        ),
                         speaker=speaker,
                     )
                 )
@@ -413,8 +403,35 @@ def _official_session_numbers(conversation: dict[str, Any]) -> list[int]:
     return sorted(numbers)
 
 
-def _tokens(text: str) -> list[str]:
-    return re.findall(r"[A-Za-z0-9_]+", text.lower())
+def _parse_official_session_datetime(value: str) -> datetime:
+    formats = [
+        "%I:%M %p on %d %b, %Y",
+        "%I:%M %p on %d %B, %Y",
+        "%d %b, %Y",
+        "%d %B, %Y",
+        "%b %d, %Y",
+        "%B %d, %Y",
+        "%Y-%m-%d",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%d %b, %Y %H:%M",
+        "%d %B, %Y %H:%M",
+    ]
+    for fmt in formats:
+        try:
+            return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    raise ValueError(f"unsupported LoCoMo session date_time: {value!r}")
+
+
+def _session_relative_days(
+    session_time: datetime,
+    first_session_time: datetime,
+    turn_index: int,
+) -> float:
+    seconds = (session_time - first_session_time).total_seconds()
+    return seconds / 86_400.0 + turn_index * 1e-4
 
 
 def _jaccard(left: set[str], right: set[str]) -> float:

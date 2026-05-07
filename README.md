@@ -80,7 +80,7 @@ lambda curve visible.
 ## Baseline Evidence
 
 ```bash
-python3 benchmarks/compare_baselines.py
+python3 examples/cross_excitation_demo.py
 ```
 
 The benchmark runs `naive_retrieve`, `diagonal_hawkes_retrieve`, and the full
@@ -114,10 +114,10 @@ The benchmark path is:
    memory masks.
 6. Evaluate held-out predictive log-likelihood on the tail of each trajectory.
 
-The first local implementation uses sentence-level facts and deterministic
-hashing embeddings so the pipeline runs without API keys. The research version
-should replace those two pieces with a Mem0-style or LLM fact extractor plus
-BGE/sentence-transformers embeddings.
+The local implementation uses sentence-level facts and MiniLM embeddings
+(`sentence-transformers/all-MiniLM-L6-v2`) by default, with deterministic
+hashing embeddings kept as a zero-dependency fallback. The research version
+should replace the sentence splitter with a Mem0-style or LLM fact extractor.
 
 ## Real LoCoMo Run
 
@@ -128,10 +128,10 @@ python3 benchmarks/locomo/run_locomo.py
 
 `download.py` fetches the official `snap-research/locomo` `locomo10.json`.
 `run_locomo.py` pins the official schema, caches the full eventized corpus in
-`outputs/locomo_eventized.json`, and writes the main result to
-`outputs/locomo_results.{json,md}`. The default run uses a balanced 80-fact
-budget across all 10 conversations for a fast repo benchmark; pass
-`--max-facts 0 --fit-mle` for the heavier optimizer path.
+`outputs/locomo_eventized_<embedding>.json`, and writes the main result to
+`outputs/locomo_results.{json,md}`. The default run uses all facts, MiniLM
+embeddings, and low-rank MLE; pass `--embedding hashing --no-fit-mle --max-facts
+80` for a fast repo benchmark.
 
 Current default run:
 
@@ -143,7 +143,7 @@ Current default run:
 
 ## Roadmap
 
-- sentence-transformers/BGE embedding example
+- stronger fact extraction beyond the local sentence splitter
 - demo GIF generation script
 - optional SQLite/vector-database backend
 

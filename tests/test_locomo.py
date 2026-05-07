@@ -85,3 +85,4 @@ def test_official_locomo10_loader_pins_sessions(tmp_path) -> None:
     assert len(conversations) == 1
     assert [message.message_id for message in conversations[0]] == ["d0", "d1"]
     assert conversations[0][1].timestamp > conversations[0][0].timestamp
+    assert conversations[0][1].timestamp == 1.0

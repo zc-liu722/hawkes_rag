@@ -20,6 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+embeddings = ["sentence-transformers>=2.7"]
 llm = ["openai>=1.0", "anthropic>=0.34"]
 
 [tool.setuptools.packages.find]
