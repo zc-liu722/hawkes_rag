@@ -30,6 +30,31 @@ No relevance labels are required. The required data is only an event log.
    pool trajectories by conversation.
 4. Evaluate held-out predictive log-likelihood and retrieval accuracy.
 
+## LoCoMo Eventization
+
+The eventization unit is an atomic fact, not a raw message chunk. Each
+conversation produces:
+
+- a local list of extracted facts
+- source events at first mention
+- mention events for later references
+- a horizon equal to the conversation duration
+- an active-memory mask containing only facts in that conversation
+
+The active-memory mask matters. If the corpus has a global catalog of facts, a
+single conversation should not pay the point-process integral for facts that
+were never observable in that conversation. The likelihood is therefore pooled
+over conversations while integrating only each trajectory's active dimensions.
+
+The zero-dependency prototype uses `SentenceFactExtractor`,
+`SemanticReferenceDetector`, and `HashingEmbedding`. For the paper path, swap in
+an LLM/Mem0-style atomic fact extractor and a local BGE/sentence-transformers
+embedding model.
+
+Held-out evaluation uses temporal tail likelihood: fit on the prefix of every
+conversation and score the conditional log-likelihood of the held-out tail,
+teacher-forcing previous held-out events as they arrive.
+
 ## Ablations
 
 - naive RAG: cosine similarity only

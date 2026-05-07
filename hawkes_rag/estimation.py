@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 import numpy as np
 from scipy.optimize import minimize
-from scipy.special import expit
 
 from hawkes_rag.core import Event, HawkesParams, MultivariateHawkesProcess
 from hawkes_rag.utils import pairwise_cosine, project_spectral_radius
@@ -79,17 +78,26 @@ class LowRankHawkesEstimator:
         trajectories: list[list[Event]],
         horizons: list[float],
         *,
+        active_memory_ids: list[list[int]] | None = None,
         max_iter: int = 200,
     ) -> FitResult:
         if len(trajectories) != len(horizons):
             raise ValueError("trajectories and horizons must have the same length")
+        if active_memory_ids is None:
+            active_memory_ids = [list(range(self.n_memories)) for _ in trajectories]
+        if len(active_memory_ids) != len(trajectories):
+            raise ValueError("active_memory_ids must match trajectories length")
         x0 = self._initial_vector()
 
         def objective(x: np.ndarray) -> float:
             params = self.unpack(x)
             value = 0.0
-            for events, horizon in zip(trajectories, horizons):
-                value -= MultivariateHawkesProcess(params).log_likelihood(events, horizon)
+            for events, horizon, active in zip(trajectories, horizons, active_memory_ids):
+                value -= MultivariateHawkesProcess(params).log_likelihood(
+                    events,
+                    horizon,
+                    active_memory_ids=active,
+                )
             if not np.isfinite(value):
                 return 1e100
             return float(value)
@@ -154,11 +162,16 @@ def fit_full_hawkes(
     horizons: list[float],
     n_memories: int,
     *,
+    active_memory_ids: list[list[int]] | None = None,
     max_radius: float = 0.95,
     learn_beta: bool = True,
     max_iter: int = 200,
 ) -> FitResult:
     """Small-N full alpha MLE, intended for synthetic recovery tests."""
+    if active_memory_ids is None:
+        active_memory_ids = [list(range(n_memories)) for _ in trajectories]
+    if len(active_memory_ids) != len(trajectories):
+        raise ValueError("active_memory_ids must match trajectories length")
 
     def unpack(x: np.ndarray) -> HawkesParams:
         idx = 0
@@ -178,8 +191,12 @@ def fit_full_hawkes(
     def objective(x: np.ndarray) -> float:
         params = unpack(x)
         value = 0.0
-        for events, horizon in zip(trajectories, horizons):
-            value -= MultivariateHawkesProcess(params).log_likelihood(events, horizon)
+        for events, horizon, active in zip(trajectories, horizons, active_memory_ids):
+            value -= MultivariateHawkesProcess(params).log_likelihood(
+                events,
+                horizon,
+                active_memory_ids=active,
+            )
         return float(value) if np.isfinite(value) else 1e100
 
     raw_mu = np.full(n_memories, inverse_softplus(0.05), dtype=float)

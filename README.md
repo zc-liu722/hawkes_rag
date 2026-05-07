@@ -77,11 +77,31 @@ These are the raw materials for the README/demo GIF: naive RAG versus
 Hawkes-RAG on the same 50-turn memory stream, with the alpha matrix and
 lambda curve visible.
 
+## LoCoMo Eventization Design
+
+```bash
+python3 examples/06_locomo_eventization.py
+```
+
+The benchmark path is:
+
+1. Extract atomic facts from each message.
+2. Emit a source event when a fact first appears.
+3. Detect later references to previous facts in the same conversation.
+4. Treat each conversation as one Hawkes trajectory.
+5. Fit a pooled likelihood across trajectories with per-conversation active
+   memory masks.
+6. Evaluate held-out predictive log-likelihood on the tail of each trajectory.
+
+The first local implementation uses sentence-level facts and deterministic
+hashing embeddings so the pipeline runs without API keys. The research version
+should replace those two pieces with a Mem0-style or LLM fact extractor plus
+BGE/sentence-transformers embeddings.
+
 ## Roadmap
 
-- LoCoMo eventization adapter
-- held-out predictive log-likelihood evaluation
-- diagonal Hawkes versus low-rank Hawkes ablation
+- real LoCoMo dataset schema pinning and artifact caching
+- diagonal Hawkes versus low-rank Hawkes benchmark table
 - sentence-transformers/BGE embedding example
 - demo GIF generation script
 - optional SQLite/vector-database backend
