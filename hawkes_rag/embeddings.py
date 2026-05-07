@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import re
-import sys
 from typing import Callable
 
 import numpy as np
+
+from hawkes_rag.gpu import resolve_torch_device
 
 
 EmbeddingFn = Callable[[str], np.ndarray]
@@ -33,7 +34,7 @@ class HashingEmbedding:
 class SentenceTransformerEmbedding:
     """Local sentence-transformers embedding wrapper with normalized vectors."""
 
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str, *, device: str | None = None, batch_size: int = 32):
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError as exc:
@@ -42,13 +43,29 @@ class SentenceTransformerEmbedding:
                 "install hawkes-rag[embeddings] or use --embedding hashing"
             ) from exc
         self.model_name = model_name
-        self.model = SentenceTransformer(model_name)
+        self.device = str(resolve_torch_device(device)) if device is not None else None
+        self.batch_size = int(batch_size)
+        self.model = SentenceTransformer(model_name, device=self.device)
 
     def __call__(self, text: str) -> np.ndarray:
-        return np.asarray(self.model.encode(text, normalize_embeddings=True), dtype=float)
+        return np.asarray(
+            self.model.encode(
+                text,
+                normalize_embeddings=True,
+                batch_size=self.batch_size,
+                convert_to_numpy=True,
+            ),
+            dtype=float,
+        )
 
 
-def make_embedding_fn(name: str, *, fallback_to_hashing: bool = True) -> EmbeddingFn:
+def make_embedding_fn(
+    name: str,
+    *,
+    fallback_to_hashing: bool = False,
+    device: str | None = None,
+    batch_size: int = 32,
+) -> EmbeddingFn:
     normalized = name.lower()
     if normalized == "hashing":
         return HashingEmbedding()
@@ -59,11 +76,15 @@ def make_embedding_fn(name: str, *, fallback_to_hashing: bool = True) -> Embeddi
     if normalized not in model_names:
         raise ValueError(f"unknown embedding backend: {name}")
     try:
-        return SentenceTransformerEmbedding(model_names[normalized])
+        return SentenceTransformerEmbedding(model_names[normalized], device=device, batch_size=batch_size)
     except Exception as exc:
         if not fallback_to_hashing:
             raise
-        print(f"{exc}; falling back to hashing embeddings", file=sys.stderr)
+        if normalized in {"minilm", "bge"}:
+            raise RuntimeError(
+                f"{exc}; --embedding {normalized} requires sentence-transformers. "
+                "Install hawkes-rag[embeddings] or choose --embedding hashing."
+            ) from exc
         return HashingEmbedding()
 
 

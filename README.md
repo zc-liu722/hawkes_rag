@@ -115,13 +115,15 @@ The benchmark path is:
 6. Evaluate held-out predictive log-likelihood on the tail of each trajectory.
 
 The local implementation uses sentence-level facts and MiniLM embeddings
-(`sentence-transformers/all-MiniLM-L6-v2`) by default, with deterministic
-hashing embeddings kept as a zero-dependency fallback. The research version
+(`sentence-transformers/all-MiniLM-L6-v2`) by default. Install the embeddings
+extra for the default run; deterministic hashing embeddings are available only
+when explicitly selected with `--embedding hashing`. The research version
 should replace the sentence splitter with a Mem0-style or LLM fact extractor.
 
 ## Real LoCoMo Run
 
 ```bash
+python3 -m pip install -e ".[embeddings]"
 python3 benchmarks/locomo/download.py
 python3 benchmarks/locomo/run_locomo.py
 ```
@@ -129,17 +131,41 @@ python3 benchmarks/locomo/run_locomo.py
 `download.py` fetches the official `snap-research/locomo` `locomo10.json`.
 `run_locomo.py` pins the official schema, caches the full eventized corpus in
 `outputs/locomo_eventized_<embedding>.json`, and writes the main result to
-`outputs/locomo_results.{json,md}`. The default run uses all facts, MiniLM
-embeddings, and low-rank MLE; pass `--embedding hashing --no-fit-mle --max-facts
-80` for a fast repo benchmark.
+`outputs/locomo_results.{json,md}`. Retrieval evaluation uses LoCoMo's QA
+labels: the question is the query and the annotated evidence messages are the
+ground truth. The default run uses all facts, MiniLM embeddings, and MLE with
+conversation-local fitting composed into a sparse global alpha; pass
+`--embedding hashing --no-fit-mle --max-facts 80` for a fast repo benchmark.
+For GPU acceleration, install the torch extra and use Adam MLE:
 
-Current default run:
+```bash
+python3 -m pip install -e ".[embeddings,torch]"
+python3 benchmarks/locomo/run_locomo.py --optimizer adam --device auto
+```
 
-| Model | Held-out PLL/event | Held-out PLL total | Held-out events |
-| --- | ---: | ---: | ---: |
-| `naive_zero_alpha` | -10.552 | -1603.920 | 152 |
-| `diagonal_alpha` | -9.759 | -1483.442 | 152 |
-| `full_alpha` | -9.574 | -1455.316 | 152 |
+`--device auto` selects CUDA first, then Apple MPS, then CPU. The same device
+is used for local sentence-transformer embeddings, embedding similarity blocks,
+top-k similarity priors, and PyTorch Hawkes optimization.
+
+Current smoke run (`outputs/locomo_results.{json,md}`) used the official
+LoCoMo10 file with deterministic hashing embeddings, `--no-fit-mle`, and
+`--max-facts 80`. The full eventized cache contains 10 conversations, 5,882
+messages, 12,048 facts, and 82,272 events; the smoke evaluation subset keeps 80
+facts and 842 events.
+
+| Model | Held-out PLL/event | Recall@1 | Recall@5 | MRR |
+| --- | ---: | ---: | ---: | ---: |
+| `naive_zero_alpha` | -5.883 | 0.690 | 0.995 | 0.828 |
+| `diagonal_alpha` | -4.525 | 0.690 | 0.995 | 0.827 |
+| `full_alpha` | -4.413 | 0.690 | 0.995 | 0.827 |
+
+The smoke test is successful as a pipeline and modeling check: official data
+loads, eventization writes a reusable cache, QA retrieval grading runs, and
+full-alpha improves held-out predictive log-likelihood over diagonal alpha by
+`+0.112` nats/event with a paired bootstrap 95% CI of `[0.057, 0.177]`.
+Retrieval quality is effectively tied across the three models on this small
+hashing subset, so this run does not yet demonstrate an end-to-end retrieval
+gain. The next validation target is the default full-corpus MiniLM + MLE run.
 
 ## Roadmap
 

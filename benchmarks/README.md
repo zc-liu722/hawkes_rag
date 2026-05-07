@@ -18,6 +18,7 @@ MRR, and held-out predictive log-likelihood.
 ## LoCoMo
 
 ```bash
+python3 -m pip install -e ".[embeddings]"
 python3 benchmarks/locomo/download.py
 python3 benchmarks/locomo/run_locomo.py
 ```
@@ -31,8 +32,34 @@ eventized corpus at `outputs/locomo_eventized_<embedding>.json`, and writes:
 - `outputs/locomo_results.json`
 - `outputs/locomo_results.md`
 
-The default run uses all eventized facts, local MiniLM embeddings, and low-rank
-MLE. Use `--embedding hashing --no-fit-mle --max-facts 80` for a fast smoke run.
+The default run uses all eventized facts, local MiniLM embeddings, LoCoMo QA
+labels for retrieval grading, and MLE with conversation-local fitting composed
+into a sparse global alpha. Use `--embedding hashing --no-fit-mle --max-facts
+80` for a fast smoke run.
+
+GPU acceleration is available through PyTorch:
+
+```bash
+python3 -m pip install -e ".[embeddings,torch]"
+python3 benchmarks/locomo/run_locomo.py --optimizer adam --device auto
+```
+
+`--device auto` tries CUDA, then Apple MPS, then CPU. It is used for local
+embeddings, similarity-prior construction, and Adam Hawkes MLE.
+
+Latest smoke result in `outputs/locomo_results.{json,md}`:
+
+| Model | Held-out PLL/event | Recall@1 | Recall@5 | MRR |
+| --- | ---: | ---: | ---: | ---: |
+| `naive_zero_alpha` | -5.883 | 0.690 | 0.995 | 0.828 |
+| `diagonal_alpha` | -4.525 | 0.690 | 0.995 | 0.827 |
+| `full_alpha` | -4.413 | 0.690 | 0.995 | 0.827 |
+
+This is a successful smoke test for the LoCoMo pipeline and Hawkes likelihood
+signal: full alpha beats diagonal alpha by `+0.112` nats/event, with paired
+bootstrap 95% CI `[0.057, 0.177]`. It is not yet a final quality benchmark
+because it uses hashing embeddings, skips MLE, caps evaluation at 80 facts, and
+does not improve QA retrieval metrics over the baselines.
 
 Planned follow-up:
 

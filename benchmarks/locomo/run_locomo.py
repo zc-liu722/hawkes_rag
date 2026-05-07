@@ -3,10 +3,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+from scipy import sparse
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -22,15 +24,73 @@ from hawkes_rag.locomo import (
     EventizedConversation,
     EventizedCorpus,
     LoCoMoEventizer,
-    load_official_locomo10_json,
 )
-from hawkes_rag.utils import cosine_similarity, pairwise_cosine
+try:
+    from hawkes_rag.locomo import LoCoMoQAPair, load_official_locomo10_samples
+except ImportError:
+    LoCoMoQAPair = Any
+    from hawkes_rag.locomo import load_official_locomo10_json
+
+    def load_official_locomo10_samples(path: Path):
+        return load_official_locomo10_json(path)
+
+from hawkes_rag.utils import cosine_similarity
+from hawkes_rag.estimation import topk_similarity_prior
 
 
-EVENTIZED_SCHEMA = "hawkes_rag.eventized_locomo.v2"
+EVENTIZED_SCHEMA = "hawkes_rag.eventized_locomo.v3"
+
+
+def _log(message: str) -> None:
+    print(f"[locomo] {message}", flush=True)
+
+
+def _corpus_summary(corpus: EventizedCorpus) -> str:
+    n_messages = sum(len(conversation.messages) for conversation in corpus.conversations)
+    n_events = sum(len(conversation.events) for conversation in corpus.conversations)
+    return (
+        f"conversations={len(corpus.conversations)} messages={n_messages} "
+        f"facts={corpus.n_memories} events={n_events}"
+    )
+
+
+def _conversation_qa_pairs(conversation: EventizedConversation) -> list[Any]:
+    return getattr(conversation, "qa_pairs", None) or []
+
+
+def _make_eventized_conversation(
+    *,
+    conversation_id: str,
+    messages: list[ConversationMessage],
+    facts: list[AtomicFact],
+    events: list[Event],
+    horizon: float,
+    qa_pairs: list[Any] | None,
+) -> EventizedConversation:
+    kwargs = {
+        "conversation_id": conversation_id,
+        "messages": messages,
+        "facts": facts,
+        "events": events,
+        "horizon": horizon,
+    }
+    if "qa_pairs" in getattr(EventizedConversation, "__dataclass_fields__", {}):
+        kwargs["qa_pairs"] = qa_pairs
+    return EventizedConversation(**kwargs)
+
+
+def _qa_question(qa_pair: Any) -> str:
+    return qa_pair["question"] if isinstance(qa_pair, dict) else qa_pair.question
+
+
+def _qa_evidence_message_ids(qa_pair: Any) -> list[str]:
+    if isinstance(qa_pair, dict):
+        return [str(value) for value in qa_pair.get("evidence_message_ids", [])]
+    return qa_pair.evidence_message_ids
 
 
 def main() -> None:
+    started = time.perf_counter()
     parser = argparse.ArgumentParser(description="Run Hawkes-RAG on the official LoCoMo corpus.")
     parser.add_argument("--data", type=Path, default=Path("benchmarks/locomo/cache/locomo10.json"))
     parser.add_argument("--eventized-cache", type=Path, default=None)
@@ -38,6 +98,24 @@ def main() -> None:
     parser.add_argument("--train-fraction", type=float, default=0.8)
     parser.add_argument("--rank", type=int, default=4)
     parser.add_argument("--max-iter", type=int, default=80)
+    parser.add_argument(
+        "--optimizer",
+        choices=["lbfgsb", "adam"],
+        default="lbfgsb",
+        help="Low-rank MLE optimizer. Use adam to run the fit with PyTorch on GPU when available.",
+    )
+    parser.add_argument("--learning-rate", type=float, default=0.05)
+    parser.add_argument(
+        "--device",
+        default="auto",
+        help="PyTorch device for embeddings/similarity/Adam MLE: auto, cuda, mps, or cpu.",
+    )
+    parser.add_argument(
+        "--dense-threshold",
+        type=int,
+        default=4000,
+        help="Above this fact count, MLE fits conversation-local dense blocks and composes sparse alpha.",
+    )
     parser.add_argument(
         "--fit-mle",
         action=argparse.BooleanOptionalAction,
@@ -57,11 +135,19 @@ def main() -> None:
         help="Fit/evaluate the first N eventized facts; 0 means full corpus.",
     )
     parser.add_argument("--bootstrap-samples", type=int, default=1000)
+    parser.add_argument(
+        "--qa-probe-delay-days",
+        type=float,
+        default=7.0,
+        help="Evaluate QA retrieval after the latest evidence time plus this delay.",
+    )
     parser.add_argument("--refresh-cache", action="store_true")
     args = parser.parse_args()
     if args.eventized_cache is None:
         args.eventized_cache = Path(f"outputs/locomo_eventized_{args.embedding}.json")
 
+    _log(f"Starting LoCoMo run with embedding={args.embedding}")
+    _log(f"Checking data file: {args.data}")
     if not args.data.exists():
         raise SystemExit(
             f"Missing LoCoMo data at {args.data}. Run: python3 benchmarks/locomo/download.py"
@@ -69,34 +155,66 @@ def main() -> None:
     args.outputs_dir.mkdir(parents=True, exist_ok=True)
     args.eventized_cache.parent.mkdir(parents=True, exist_ok=True)
 
-    embedding_fn = make_embedding_fn(args.embedding)
+    _log("Initializing embedding backend")
+    embedding_fn = make_embedding_fn(args.embedding, device=args.device)
 
     if args.eventized_cache.exists() and not args.refresh_cache:
-        corpus = read_eventized_corpus(args.eventized_cache)
-        cache_status = "loaded"
+        _log(f"Loading eventized cache: {args.eventized_cache}")
+        try:
+            corpus = read_eventized_corpus(args.eventized_cache)
+            cache_status = "loaded"
+            _log(f"Loaded eventized cache ({_corpus_summary(corpus)})")
+        except ValueError:
+            _log("Eventized cache schema is stale; loading source data and rebuilding cache")
+            samples = load_official_locomo10_samples(args.data)
+            _log(f"Eventizing {len(samples)} conversations")
+            corpus = LoCoMoEventizer(embedding_fn=embedding_fn).eventize(samples)
+            write_eventized_corpus(corpus, args.eventized_cache)
+            cache_status = "refreshed_schema"
+            _log(f"Refreshed eventized cache ({_corpus_summary(corpus)})")
     else:
-        conversations = load_official_locomo10_json(args.data)
-        corpus = LoCoMoEventizer(embedding_fn=embedding_fn).eventize(conversations)
+        _log(f"Loading LoCoMo source data: {args.data}")
+        samples = load_official_locomo10_samples(args.data)
+        _log(f"Eventizing {len(samples)} conversations")
+        corpus = LoCoMoEventizer(embedding_fn=embedding_fn).eventize(samples)
+        _log(f"Writing eventized cache: {args.eventized_cache}")
         write_eventized_corpus(corpus, args.eventized_cache)
         cache_status = "written"
+        _log(f"Wrote eventized cache ({_corpus_summary(corpus)})")
 
     full_corpus = corpus
     if args.max_facts > 0:
+        _log(f"Limiting corpus to max_facts={args.max_facts}")
         corpus = limit_corpus_facts(corpus, args.max_facts)
+        _log(f"Limited corpus ready ({_corpus_summary(corpus)})")
 
+    _log("Preparing embedding matrix")
     embeddings = corpus.embeddings()
+    _log(f"Embedding matrix shape={embeddings.shape}")
     if args.fit_mle:
+        _log(
+            f"Fitting low-rank Hawkes MLE rank={args.rank} max_iter={args.max_iter} "
+            f"dense_threshold={args.dense_threshold} optimizer={args.optimizer} device={args.device or 'auto'}"
+        )
         estimator = LowRankHawkesEstimator.from_embeddings(
             embeddings,
             rank=args.rank,
             seed=0,
             learn_beta=True,
+            dense_threshold=args.dense_threshold,
+            optimizer=args.optimizer,
+            learning_rate=args.learning_rate,
+            device=args.device,
         )
         fit = estimator.fit(
             corpus.trajectories(),
             corpus.horizons(),
             active_memory_ids=corpus.active_memory_ids(),
             max_iter=args.max_iter,
+        )
+        _log(
+            f"MLE finished success={fit.success} n_iter={fit.n_iter} "
+            f"objective={fit.objective:.6f}"
         )
         full_params = fit.params
         fit_payload = {
@@ -107,9 +225,13 @@ def main() -> None:
             "n_iter": fit.n_iter,
             "rank": args.rank,
             "beta": fit.params.beta,
+            "optimizer": args.optimizer,
+            "device": args.device or "auto",
         }
     else:
-        full_params = stable_similarity_params(corpus, embeddings)
+        _log("Skipping MLE; building stable similarity-alpha fallback")
+        full_params = stable_similarity_params(corpus, embeddings, dense_threshold=args.dense_threshold)
+        _log("Stable similarity-alpha parameters ready")
         fit_payload = {
             "mode": "stable_similarity_alpha",
             "success": True,
@@ -120,19 +242,37 @@ def main() -> None:
             "beta": full_params.beta,
         }
 
+    _log("Building train/test splits")
     splits = corpus.heldout_splits(args.train_fraction)
+    _log(f"Created {len(splits)} heldout splits with train_fraction={args.train_fraction}")
+    _log("Evaluating heldout PLL for full_alpha")
     full_pll = heldout_predictive_log_likelihood(full_params, splits)
+    _log(
+        f"full_alpha heldout PLL/event={full_pll.per_event:.6f} "
+        f"events={full_pll.n_events}"
+    )
+    _log("Evaluating heldout PLL for diagonal_alpha")
     diagonal_params = diagonal_only(full_params)
     diagonal_pll = heldout_predictive_log_likelihood(diagonal_params, splits)
+    _log(
+        f"diagonal_alpha heldout PLL/event={diagonal_pll.per_event:.6f} "
+        f"events={diagonal_pll.n_events}"
+    )
+    _log("Evaluating heldout PLL for naive_zero_alpha")
     naive_params = HawkesParams(
         mu=estimate_mu(corpus.trajectories(), corpus.horizons(), corpus.n_memories),
-        alpha=np.zeros_like(full_params.alpha),
+        alpha=zero_alpha_like(full_params.alpha),
         beta=full_params.beta,
     )
     naive_pll = heldout_predictive_log_likelihood(
         naive_params,
         splits,
     )
+    _log(
+        f"naive_zero_alpha heldout PLL/event={naive_pll.per_event:.6f} "
+        f"events={naive_pll.n_events}"
+    )
+    _log("Evaluating QA retrieval metrics")
     retrieval = retrieval_metrics(
         corpus,
         embedding_fn,
@@ -142,7 +282,9 @@ def main() -> None:
             "full_alpha": full_params,
         },
         train_fraction=args.train_fraction,
+        probe_delay_days=args.qa_probe_delay_days,
     )
+    _log("Running paired bootstrap delta CI")
     bootstrap = paired_bootstrap_delta_ci(
         full_params,
         diagonal_params,
@@ -165,6 +307,8 @@ def main() -> None:
         "n_facts_full_cache": full_corpus.n_memories,
         "max_facts": args.max_facts,
         "embedding": args.embedding,
+        "qa_probe_delay_days": args.qa_probe_delay_days,
+        "dense_threshold": args.dense_threshold,
         "n_events": sum(len(conversation.events) for conversation in corpus.conversations),
         "n_events_full_cache": sum(
             len(conversation.events) for conversation in full_corpus.conversations
@@ -178,9 +322,12 @@ def main() -> None:
         "retrieval": retrieval,
         "paired_bootstrap": bootstrap,
     }
+    _log(f"Writing JSON results: {args.outputs_dir / 'locomo_results.json'}")
     (args.outputs_dir / "locomo_results.json").write_text(json.dumps(result, indent=2) + "\n")
     markdown = format_markdown(result)
+    _log(f"Writing Markdown results: {args.outputs_dir / 'locomo_results.md'}")
     (args.outputs_dir / "locomo_results.md").write_text(markdown + "\n")
+    _log(f"Run complete in {time.perf_counter() - started:.1f}s")
     print(markdown)
 
 
@@ -208,6 +355,7 @@ def retrieval_metrics(
     params_by_model: dict[str, HawkesParams],
     *,
     train_fraction: float,
+    probe_delay_days: float,
     top_ks: tuple[int, ...] = (1, 5),
 ) -> list[dict[str, Any]]:
     rows = []
@@ -217,35 +365,44 @@ def retrieval_metrics(
         n_queries = 0
         process = MultivariateHawkesProcess(params)
         for conversation in corpus.conversations:
-            cutoff = conversation.horizon * train_fraction
-            train_events = [event for event in conversation.events if event.time < cutoff]
-            messages_by_time = {message.timestamp: message for message in conversation.messages}
-            active_ids = set(conversation.active_memory_ids)
-            for event in conversation.events:
-                if event.time < cutoff or event.weight >= 1.0 or event.memory_id not in active_ids:
+            qa_pairs = _conversation_qa_pairs(conversation)
+            if not qa_pairs:
+                continue
+            facts_by_message_id: dict[str, list[AtomicFact]] = {}
+            for fact in conversation.facts:
+                facts_by_message_id.setdefault(fact.source_message_id, []).append(fact)
+            for qa_pair in qa_pairs:
+                evidence_facts = [
+                    fact
+                    for evidence_id in _qa_evidence_message_ids(qa_pair)
+                    for fact in facts_by_message_id.get(evidence_id, [])
+                ]
+                if not evidence_facts:
                     continue
-                message = messages_by_time.get(event.time)
-                if message is None:
-                    continue
-                query = embedding_fn(message.text)
-                intensities = process.intensities(event.time, train_events)
+                query_time = max(fact.source_time for fact in evidence_facts) + probe_delay_days
+                query = embedding_fn(_qa_question(qa_pair))
+                history = [event for event in conversation.events if event.time < query_time]
+                intensities = process.intensities(query_time, history)
                 scored = []
                 for fact in conversation.facts:
-                    if fact.source_time >= event.time:
+                    if fact.source_time > query_time:
                         continue
                     sim = cosine_similarity(query, fact.embedding)
                     scored.append((float(sim * intensities[fact.id]), fact.id))
                 if not scored:
                     continue
                 ranked_ids = [fact_id for _, fact_id in sorted(scored, reverse=True)]
+                ground_truth_ids = {fact.id for fact in evidence_facts}
                 n_queries += 1
                 for k in top_ks:
-                    if event.memory_id in ranked_ids[:k]:
+                    if ground_truth_ids.intersection(ranked_ids[:k]):
                         hits[k] += 1
-                try:
-                    rank = ranked_ids.index(event.memory_id) + 1
-                except ValueError:
-                    rank = 0
+                ranks = [
+                    ranked_ids.index(fact_id) + 1
+                    for fact_id in ground_truth_ids
+                    if fact_id in ranked_ids
+                ]
+                rank = min(ranks) if ranks else 0
                 reciprocal_ranks.append(0.0 if rank == 0 else 1.0 / rank)
         rows.append(
             {
@@ -318,6 +475,8 @@ def format_markdown(result: dict[str, Any]) -> str:
         f"- facts_full_cache: {result['n_facts_full_cache']}",
         f"- max_facts: {result['max_facts']} (`0` means full corpus)",
         f"- embedding: `{result['embedding']}`",
+        f"- qa_probe_delay_days: {result['qa_probe_delay_days']}",
+        f"- dense_threshold: {result['dense_threshold']}",
         f"- events: {result['n_events']}",
         f"- events_full_cache: {result['n_events_full_cache']}",
         f"- fit_mode: {result['fit']['mode']}",
@@ -372,12 +531,13 @@ def limit_corpus_facts(corpus: EventizedCorpus, max_facts: int) -> EventizedCorp
         for fact in facts:
             facts_by_id[fact.id] = fact
         conversations.append(
-            EventizedConversation(
+            _make_eventized_conversation(
                 conversation_id=conversation.conversation_id,
                 messages=conversation.messages,
                 facts=facts,
                 events=events,
                 horizon=conversation.horizon,
+                qa_pairs=_conversation_qa_pairs(conversation),
             )
         )
     remap = {old_id: new_id for new_id, old_id in enumerate(sorted(facts_by_id))}
@@ -402,12 +562,13 @@ def limit_corpus_facts(corpus: EventizedCorpus, max_facts: int) -> EventizedCorp
             if event.memory_id in remap
         ]
         remapped_conversations.append(
-            EventizedConversation(
+            _make_eventized_conversation(
                 conversation_id=conversation.conversation_id,
                 messages=conversation.messages,
                 facts=facts,
                 events=events,
                 horizon=conversation.horizon,
+                qa_pairs=_conversation_qa_pairs(conversation),
             )
         )
     remapped_facts = [remapped_facts_by_id[key] for key in sorted(remapped_facts_by_id)]
@@ -432,11 +593,33 @@ def balanced_fact_ids(corpus: EventizedCorpus, max_facts: int) -> set[int]:
     return keep_ids
 
 
-def stable_similarity_params(corpus: EventizedCorpus, embeddings: np.ndarray) -> HawkesParams:
+def stable_similarity_params(
+    corpus: EventizedCorpus,
+    embeddings: np.ndarray,
+    *,
+    dense_threshold: int,
+) -> HawkesParams:
     mu = estimate_mu(corpus.trajectories(), corpus.horizons(), corpus.n_memories)
-    alpha = 0.45 * np.maximum(0.0, pairwise_cosine(embeddings) - 0.32)
-    np.fill_diagonal(alpha, 0.6)
+    alpha = topk_similarity_prior(
+        embeddings,
+        threshold=0.32,
+        top_k=32,
+        dense_output=corpus.n_memories <= dense_threshold,
+    )
+    if sparse.issparse(alpha):
+        alpha = (0.45 * alpha).tolil()
+        alpha.setdiag(0.6)
+        alpha = alpha.tocsr()
+    else:
+        alpha = 0.45 * alpha
+        np.fill_diagonal(alpha, 0.6)
     return HawkesParams(mu=mu, alpha=alpha, beta=1.0).stable(max_radius=0.95)
+
+
+def zero_alpha_like(alpha: np.ndarray) -> np.ndarray:
+    if sparse.issparse(alpha):
+        return sparse.csr_matrix(alpha.shape, dtype=float)
+    return np.zeros_like(alpha)
 
 
 def write_eventized_corpus(corpus: EventizedCorpus, path: Path) -> None:
@@ -458,6 +641,7 @@ def write_eventized_corpus(corpus: EventizedCorpus, path: Path) -> None:
                 "facts": [fact_to_json(fact) for fact in conversation.facts],
                 "events": [event_to_json(event) for event in conversation.events],
                 "horizon": conversation.horizon,
+                "qa_pairs": [qa_to_json(qa_pair) for qa_pair in _conversation_qa_pairs(conversation)],
             }
             for conversation in corpus.conversations
         ],
@@ -486,12 +670,13 @@ def read_eventized_corpus(path: Path) -> EventizedCorpus:
         for fact in facts:
             facts_by_id[fact.id] = fact
         conversations.append(
-            EventizedConversation(
+            _make_eventized_conversation(
                 conversation_id=raw["conversation_id"],
                 messages=messages,
                 facts=facts,
                 events=[event_from_json(item) for item in raw["events"]],
                 horizon=float(raw["horizon"]),
+                qa_pairs=[qa_from_json(item) for item in raw.get("qa_pairs", [])],
             )
         )
     facts = [facts_by_id[key] for key in sorted(facts_by_id)]
@@ -526,6 +711,38 @@ def event_to_json(event: Event) -> dict[str, Any]:
 
 def event_from_json(item: dict[str, Any]) -> Event:
     return Event(time=float(item["time"]), memory_id=int(item["memory_id"]), weight=float(item["weight"]))
+
+
+def qa_to_json(qa_pair: LoCoMoQAPair) -> dict[str, Any]:
+    if isinstance(qa_pair, dict):
+        return {
+            "question": qa_pair["question"],
+            "answer": qa_pair.get("answer"),
+            "evidence_message_ids": qa_pair.get("evidence_message_ids", []),
+            "category": qa_pair.get("category"),
+        }
+    return {
+        "question": qa_pair.question,
+        "answer": qa_pair.answer,
+        "evidence_message_ids": qa_pair.evidence_message_ids,
+        "category": qa_pair.category,
+    }
+
+
+def qa_from_json(item: dict[str, Any]) -> LoCoMoQAPair:
+    if LoCoMoQAPair is Any:
+        return {
+            "question": item["question"],
+            "answer": item.get("answer"),
+            "evidence_message_ids": [str(value) for value in item.get("evidence_message_ids", [])],
+            "category": item.get("category"),
+        }
+    return LoCoMoQAPair(
+        question=item["question"],
+        answer=item.get("answer"),
+        evidence_message_ids=[str(value) for value in item.get("evidence_message_ids", [])],
+        category=item.get("category"),
+    )
 
 
 if __name__ == "__main__":

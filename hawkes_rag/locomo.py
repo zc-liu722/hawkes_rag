@@ -35,12 +35,28 @@ class AtomicFact:
 
 
 @dataclass(frozen=True)
+class LoCoMoQAPair:
+    question: str
+    answer: Any
+    evidence_message_ids: list[str]
+    category: int | None = None
+
+
+@dataclass(frozen=True)
+class OfficialLoCoMoSample:
+    sample_id: str
+    messages: list[ConversationMessage]
+    qa_pairs: list[LoCoMoQAPair]
+
+
+@dataclass(frozen=True)
 class EventizedConversation:
     conversation_id: str
     messages: list[ConversationMessage]
     facts: list[AtomicFact]
     events: list[Event]
     horizon: float
+    qa_pairs: list[LoCoMoQAPair] | None = None
 
     @property
     def active_memory_ids(self) -> list[int]:
@@ -177,14 +193,24 @@ class LoCoMoEventizer:
         self.mention_event_weight = float(mention_event_weight)
         self.time_step = float(time_step)
 
-    def eventize(self, conversations: Iterable[list[ConversationMessage]]) -> EventizedCorpus:
+    def eventize(
+        self,
+        conversations: Iterable[list[ConversationMessage] | OfficialLoCoMoSample],
+    ) -> EventizedCorpus:
         global_facts: list[AtomicFact] = []
         eventized_conversations = []
         next_fact_id = 0
-        for messages in conversations:
+        for item in conversations:
+            if isinstance(item, OfficialLoCoMoSample):
+                messages = item.messages
+                qa_pairs = item.qa_pairs
+            else:
+                messages = item
+                qa_pairs = None
             eventized, next_fact_id = self.eventize_conversation(
                 sorted(messages, key=lambda m: m.timestamp),
                 next_fact_id=next_fact_id,
+                qa_pairs=qa_pairs,
             )
             global_facts.extend(eventized.facts)
             eventized_conversations.append(eventized)
@@ -195,6 +221,7 @@ class LoCoMoEventizer:
         messages: list[ConversationMessage],
         *,
         next_fact_id: int = 0,
+        qa_pairs: list[LoCoMoQAPair] | None = None,
     ) -> tuple[EventizedConversation, int]:
         if not messages:
             raise ValueError("cannot eventize an empty conversation")
@@ -252,6 +279,7 @@ class LoCoMoEventizer:
                 facts=facts,
                 events=events,
                 horizon=float(horizon),
+                qa_pairs=qa_pairs,
             ),
             next_fact_id,
         )
@@ -311,11 +339,16 @@ def load_official_locomo10_json(path: str | Path) -> list[list[ConversationMessa
     This loader is intentionally strict so benchmark runs fail fast if a mirror
     silently changes shape.
     """
+    return [sample.messages for sample in load_official_locomo10_samples(path)]
+
+
+def load_official_locomo10_samples(path: str | Path) -> list[OfficialLoCoMoSample]:
+    """Load official LoCoMo samples with conversation messages and QA labels."""
     data = json.loads(Path(path).read_text())
     if not isinstance(data, list):
         raise ValueError("official LoCoMo data must be a JSON list")
 
-    conversations: list[list[ConversationMessage]] = []
+    samples: list[OfficialLoCoMoSample] = []
     for sample_index, sample in enumerate(data):
         if not isinstance(sample, dict):
             raise ValueError(f"sample {sample_index} must be an object")
@@ -376,8 +409,43 @@ def load_official_locomo10_json(path: str | Path) -> list[list[ConversationMessa
                     )
                 )
         if messages:
-            conversations.append(messages)
-    return conversations
+            samples.append(
+                OfficialLoCoMoSample(
+                    sample_id=sample_id,
+                    messages=messages,
+                    qa_pairs=_official_qa_pairs(sample),
+                )
+            )
+    return samples
+
+
+def _official_qa_pairs(sample: dict[str, Any]) -> list[LoCoMoQAPair]:
+    qa = sample.get("qa", [])
+    if not isinstance(qa, list):
+        raise ValueError(f"sample {sample.get('sample_id')} qa must be a list")
+    pairs = []
+    for index, item in enumerate(qa):
+        if not isinstance(item, dict):
+            raise ValueError(f"qa[{index}] must be an object")
+        question = item.get("question")
+        evidence = item.get("evidence", [])
+        if not isinstance(question, str) or not question.strip():
+            continue
+        if isinstance(evidence, str):
+            evidence_ids = [evidence]
+        elif isinstance(evidence, list):
+            evidence_ids = [str(value) for value in evidence]
+        else:
+            evidence_ids = []
+        pairs.append(
+            LoCoMoQAPair(
+                question=question,
+                answer=item.get("answer"),
+                evidence_message_ids=evidence_ids,
+                category=int(item["category"]) if "category" in item else None,
+            )
+        )
+    return pairs
 
 
 def _find_conversations(data: Any) -> list[dict[str, Any]]:

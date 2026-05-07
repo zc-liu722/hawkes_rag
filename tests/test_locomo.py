@@ -8,6 +8,7 @@ from hawkes_rag.locomo import (
     ConversationMessage,
     LoCoMoEventizer,
     load_official_locomo10_json,
+    load_official_locomo10_samples,
 )
 
 
@@ -76,7 +77,15 @@ def test_official_locomo10_loader_pins_sessions(tmp_path) -> None:
               "session_2": [
                 {"speaker": "Bob", "dia_id": "d1", "text": "Bob remembers Alice likes tea."}
               ]
-            }
+            },
+            "qa": [
+              {
+                "question": "What does Alice like?",
+                "answer": "green tea",
+                "evidence": ["d0"],
+                "category": 1
+              }
+            ]
           }
         ]
         """
@@ -86,3 +95,9 @@ def test_official_locomo10_loader_pins_sessions(tmp_path) -> None:
     assert [message.message_id for message in conversations[0]] == ["d0", "d1"]
     assert conversations[0][1].timestamp > conversations[0][0].timestamp
     assert conversations[0][1].timestamp == 1.0
+
+    samples = load_official_locomo10_samples(path)
+    corpus = LoCoMoEventizer().eventize(samples)
+    assert corpus.conversations[0].qa_pairs
+    assert corpus.conversations[0].qa_pairs[0].question == "What does Alice like?"
+    assert corpus.conversations[0].qa_pairs[0].evidence_message_ids == ["d0"]

@@ -7,6 +7,7 @@ from scipy.optimize import minimize
 from scipy import sparse
 
 from hawkes_rag.core import Event, HawkesParams, MultivariateHawkesProcess
+from hawkes_rag.gpu import best_float_dtype, resolve_torch_device, torch_spectral_radius
 from hawkes_rag.utils import pairwise_cosine, project_spectral_radius
 
 
@@ -17,6 +18,17 @@ class FitResult:
     objective: float
     message: str
     n_iter: int
+
+
+def _make_objective_callback(label: str, objective):
+    state = {"iteration": 0}
+
+    def callback(xk: np.ndarray) -> None:
+        state["iteration"] += 1
+        value = objective(xk)
+        print(f"[{label}] iter={state['iteration']} objective={value:.6f}", flush=True)
+
+    return callback
 
 
 class LowRankHawkesEstimator:
@@ -36,6 +48,9 @@ class LowRankHawkesEstimator:
         similarity_prior: np.ndarray | None = None,
         learn_beta: bool = True,
         dense_threshold: int = 4000,
+        optimizer: str = "lbfgsb",
+        learning_rate: float = 0.05,
+        device: str | None = None,
         seed: int | None = 0,
     ):
         if n_memories <= 0:
@@ -47,6 +62,9 @@ class LowRankHawkesEstimator:
         self.max_radius = float(max_radius)
         self.learn_beta = bool(learn_beta)
         self.dense_threshold = int(dense_threshold)
+        self.optimizer = optimizer.lower()
+        self.learning_rate = float(learning_rate)
+        self.device = device
         self.rng = np.random.default_rng(seed)
         if similarity_prior is None:
             similarity_prior = np.zeros((n_memories, n_memories), dtype=float)
@@ -69,12 +87,16 @@ class LowRankHawkesEstimator:
         threshold: float = 0.3,
         top_k: int = 32,
         dense_threshold: int = 4000,
+        optimizer: str = "lbfgsb",
+        learning_rate: float = 0.05,
+        device: str | None = None,
     ) -> "LowRankHawkesEstimator":
         similarities = topk_similarity_prior(
             embeddings,
             threshold=threshold,
             top_k=top_k,
             dense_output=embeddings.shape[0] <= dense_threshold,
+            device=device,
         )
         return cls(
             n_memories=similarities.shape[0],
@@ -83,6 +105,9 @@ class LowRankHawkesEstimator:
             similarity_prior=similarities,
             learn_beta=learn_beta,
             dense_threshold=dense_threshold,
+            optimizer=optimizer,
+            learning_rate=learning_rate,
+            device=device,
             seed=seed,
         )
 
@@ -100,6 +125,22 @@ class LowRankHawkesEstimator:
             active_memory_ids = [list(range(self.n_memories)) for _ in trajectories]
         if len(active_memory_ids) != len(trajectories):
             raise ValueError("active_memory_ids must match trajectories length")
+        if self.optimizer in {"adam", "torch", "pytorch"}:
+            if self.n_memories > self.dense_threshold:
+                return self._fit_local_active_sets(
+                    trajectories,
+                    horizons,
+                    active_memory_ids=active_memory_ids,
+                    max_iter=max_iter,
+                )
+            return self._fit_torch_adam(
+                trajectories,
+                horizons,
+                active_memory_ids=active_memory_ids,
+                max_iter=max_iter,
+            )
+        if self.optimizer not in {"lbfgsb", "l-bfgs-b", "scipy"}:
+            raise ValueError("optimizer must be one of 'lbfgsb' or 'adam'")
         if self.n_memories > self.dense_threshold:
             return self._fit_local_active_sets(
                 trajectories,
@@ -126,6 +167,7 @@ class LowRankHawkesEstimator:
             objective,
             x0,
             method="L-BFGS-B",
+            callback=_make_objective_callback("low_rank_mle", objective),
             options={"maxiter": max_iter, "maxls": 30},
         )
         return FitResult(
@@ -208,6 +250,9 @@ class LowRankHawkesEstimator:
                 similarity_prior=local_prior,
                 learn_beta=self.learn_beta,
                 dense_threshold=self.dense_threshold,
+                optimizer=self.optimizer,
+                learning_rate=self.learning_rate,
+                device=self.device,
                 seed=int(self.rng.integers(0, 2**32 - 1)),
             )
             fit = local_estimator.fit([local_events], [horizon], max_iter=max_iter)
@@ -243,6 +288,143 @@ class LowRankHawkesEstimator:
             raw_beta = np.array([inverse_softplus(1.0)])
             return np.concatenate([raw_mu, u.ravel(), v.ravel(), gamma, diagonal_bias, raw_beta])
         return np.concatenate([raw_mu, u.ravel(), v.ravel(), gamma, diagonal_bias])
+
+    def _fit_torch_adam(
+        self,
+        trajectories: list[list[Event]],
+        horizons: list[float],
+        *,
+        active_memory_ids: list[list[int]],
+        max_iter: int,
+    ) -> FitResult:
+        try:
+            import torch
+        except ImportError as exc:
+            raise ImportError(
+                "LowRankHawkesEstimator(..., optimizer='adam') requires PyTorch. "
+                "Install hawkes-rag[torch] first."
+            ) from exc
+
+        torch_device = resolve_torch_device(self.device)
+        dtype = best_float_dtype(torch, torch_device)
+        n = self.n_memories
+        r = self.rank
+        raw_mu = torch.full(
+            (n,),
+            inverse_softplus(0.05),
+            dtype=dtype,
+            device=torch_device,
+            requires_grad=True,
+        )
+        u = torch.as_tensor(
+            self.rng.normal(0.0, 0.05, size=(n, r)),
+            dtype=dtype,
+            device=torch_device,
+        ).requires_grad_()
+        v = torch.as_tensor(
+            self.rng.normal(0.0, 0.05, size=(n, r)),
+            dtype=dtype,
+            device=torch_device,
+        ).requires_grad_()
+        gamma = torch.tensor(0.5, dtype=dtype, device=torch_device, requires_grad=True)
+        diagonal_bias = torch.tensor(
+            inverse_softplus(0.5),
+            dtype=dtype,
+            device=torch_device,
+            requires_grad=True,
+        )
+        parameters = [raw_mu, u, v, gamma, diagonal_bias]
+        if self.learn_beta:
+            raw_beta = torch.tensor(
+                inverse_softplus(1.0),
+                dtype=dtype,
+                device=torch_device,
+                requires_grad=True,
+            )
+            parameters.append(raw_beta)
+        else:
+            raw_beta = torch.tensor(inverse_softplus(1.0), dtype=dtype, device=torch_device)
+        prior_np = (
+            self.similarity_prior.toarray()
+            if sparse.issparse(self.similarity_prior)
+            else self.similarity_prior
+        )
+        similarity_prior = torch.as_tensor(prior_np, dtype=dtype, device=torch_device)
+        eye = torch.eye(n, dtype=dtype, device=torch_device)
+        prepared = [
+            _prepare_torch_trajectory(torch, events, horizon, active, n, torch_device, dtype)
+            for events, horizon, active in zip(trajectories, horizons, active_memory_ids)
+        ]
+        adam = torch.optim.Adam(parameters, lr=self.learning_rate)
+        best_state: dict[str, torch.Tensor] | None = None
+        best_objective = float("inf")
+        completed_iters = 0
+        for iteration in range(max_iter):
+            adam.zero_grad()
+            mu, alpha, beta = _unpack_low_rank_torch(
+                torch,
+                raw_mu,
+                u,
+                v,
+                gamma,
+                diagonal_bias,
+                raw_beta,
+                similarity_prior,
+                eye,
+                max_radius=self.max_radius,
+            )
+            objective = torch.zeros((), dtype=dtype, device=torch_device)
+            for trajectory in prepared:
+                objective = objective - _torch_log_likelihood(torch, mu, alpha, beta, trajectory)
+            if not torch.isfinite(objective):
+                break
+            objective.backward()
+            adam.step()
+            completed_iters = iteration + 1
+            objective_value = float(objective.detach().cpu())
+            if objective_value < best_objective:
+                best_objective = objective_value
+                best_state = {
+                    "raw_mu": raw_mu.detach().clone(),
+                    "u": u.detach().clone(),
+                    "v": v.detach().clone(),
+                    "gamma": gamma.detach().clone(),
+                    "diagonal_bias": diagonal_bias.detach().clone(),
+                    "raw_beta": raw_beta.detach().clone(),
+                }
+        if best_state is not None:
+            with torch.no_grad():
+                raw_mu.copy_(best_state["raw_mu"])
+                u.copy_(best_state["u"])
+                v.copy_(best_state["v"])
+                gamma.copy_(best_state["gamma"])
+                diagonal_bias.copy_(best_state["diagonal_bias"])
+                if self.learn_beta:
+                    raw_beta.copy_(best_state["raw_beta"])
+        mu_t, alpha_t, beta_t = _unpack_low_rank_torch(
+            torch,
+            raw_mu,
+            u,
+            v,
+            gamma,
+            diagonal_bias,
+            raw_beta,
+            similarity_prior,
+            eye,
+            max_radius=self.max_radius,
+        )
+        params = HawkesParams(
+            mu=mu_t.detach().cpu().numpy(),
+            alpha=alpha_t.detach().cpu().numpy(),
+            beta=float(beta_t.detach().cpu()),
+        )
+        return FitResult(
+            params=params,
+            success=bool(np.isfinite(best_objective)),
+            objective=float(best_objective),
+            message=f"Adam low-rank MLE finished on {torch_device}",
+            n_iter=int(completed_iters),
+        )
 
 
 def fit_full_hawkes(
@@ -313,6 +495,7 @@ def fit_full_hawkes(
         objective,
         x0,
         method="L-BFGS-B",
+        callback=_make_objective_callback("full_hawkes_mle", objective),
         options={"maxiter": max_iter, "maxls": 30},
     )
     return FitResult(
@@ -344,8 +527,8 @@ def _fit_full_hawkes_torch(
             "Install the optional torch dependency first."
         ) from exc
 
-    torch_device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
-    dtype = torch.float64
+    torch_device = resolve_torch_device(device)
+    dtype = best_float_dtype(torch, torch_device)
     raw_mu = torch.full(
         (n_memories,),
         inverse_softplus(0.05),
@@ -463,9 +646,34 @@ def _unpack_full_hawkes_torch(torch, raw_mu, raw_alpha, raw_beta, *, max_radius:
     mu = torch.nn.functional.softplus(raw_mu) + 1e-5
     alpha = torch.nn.functional.softplus(raw_alpha)
     if alpha.numel():
-        radius = torch.max(torch.abs(torch.linalg.eigvals(alpha)))
+        radius = torch_spectral_radius(torch, alpha)
         max_radius_t = torch.as_tensor(max_radius, dtype=alpha.dtype, device=alpha.device)
-        scale = torch.clamp(max_radius_t / radius, max=1.0)
+        scale = torch.clamp(max_radius_t / radius.clamp_min(1e-12), max=1.0)
+        alpha = alpha * scale
+    beta = torch.nn.functional.softplus(raw_beta) + 1e-5
+    return mu, alpha, beta
+
+
+def _unpack_low_rank_torch(
+    torch,
+    raw_mu,
+    u,
+    v,
+    gamma,
+    diagonal_bias,
+    raw_beta,
+    similarity_prior,
+    eye,
+    *,
+    max_radius: float,
+):
+    mu = torch.nn.functional.softplus(raw_mu) + 1e-5
+    raw_alpha = u @ v.T + gamma * similarity_prior + diagonal_bias * eye
+    alpha = torch.nn.functional.softplus(raw_alpha)
+    if alpha.numel():
+        radius = torch_spectral_radius(torch, alpha)
+        max_radius_t = torch.as_tensor(max_radius, dtype=alpha.dtype, device=alpha.device)
+        scale = torch.clamp(max_radius_t / radius.clamp_min(1e-12), max=1.0)
         alpha = alpha * scale
     beta = torch.nn.functional.softplus(raw_beta) + 1e-5
     return mu, alpha, beta
@@ -516,6 +724,7 @@ def topk_similarity_prior(
     threshold: float = 0.3,
     top_k: int = 32,
     dense_output: bool = False,
+    device: str | None = None,
 ) -> np.ndarray:
     embeddings = np.asarray(embeddings, dtype=float)
     if embeddings.ndim != 2:
@@ -524,7 +733,7 @@ def topk_similarity_prior(
     if n == 0:
         return np.zeros((0, 0), dtype=float)
     if dense_output:
-        similarities = np.maximum(0.0, pairwise_cosine(embeddings) - threshold)
+        similarities = np.maximum(0.0, pairwise_cosine(embeddings, device=device) - threshold)
         np.fill_diagonal(similarities, 0.0)
         if top_k > 0 and top_k < n - 1:
             for row in range(n):
@@ -535,6 +744,16 @@ def topk_similarity_prior(
         return similarities
 
     top_k = max(0, min(int(top_k), max(n - 1, 0)))
+    if device is not None and device.lower() != "cpu":
+        try:
+            return _topk_similarity_prior_torch(
+                embeddings,
+                threshold=threshold,
+                top_k=top_k,
+                device=device,
+            )
+        except ImportError:
+            pass
     norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
     normalized = embeddings / np.maximum(norms, 1e-12)
     rows = []
@@ -549,6 +768,40 @@ def topk_similarity_prior(
         candidate_ids = np.argpartition(sims, -candidate_count)[-candidate_count:]
         for col in candidate_ids:
             value = float(sims[col] - threshold)
+            if value > 0.0:
+                rows.append(row)
+                cols.append(int(col))
+                values.append(value)
+    return sparse.csr_matrix((values, (rows, cols)), shape=(n, n), dtype=float)
+
+
+def _topk_similarity_prior_torch(
+    embeddings: np.ndarray,
+    *,
+    threshold: float,
+    top_k: int,
+    device: str | None,
+) -> sparse.csr_matrix:
+    import torch
+
+    n = embeddings.shape[0]
+    if top_k == 0:
+        return sparse.csr_matrix((n, n), dtype=float)
+    torch_device = resolve_torch_device(device)
+    tensor = torch.as_tensor(embeddings, dtype=torch.float32, device=torch_device)
+    normalized = torch.nn.functional.normalize(tensor, p=2, dim=1, eps=1e-12)
+    rows = []
+    cols = []
+    values = []
+    candidate_count = min(top_k, n - 1)
+    for row in range(n):
+        sims = normalized @ normalized[row]
+        sims[row] = -torch.inf
+        candidate_values, candidate_ids = torch.topk(sims, k=candidate_count)
+        candidate_values = candidate_values.detach().cpu().numpy()
+        candidate_ids = candidate_ids.detach().cpu().numpy()
+        for col, sim in zip(candidate_ids, candidate_values):
+            value = float(sim - threshold)
             if value > 0.0:
                 rows.append(row)
                 cols.append(int(col))

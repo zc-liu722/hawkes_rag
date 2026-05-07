@@ -47,12 +47,14 @@ class HawkesMemoryStore:
         similarity_threshold: float = 0.3,
         similarity_scale: float = 0.3,
         max_radius: float = 0.95,
+        device: str | None = None,
     ):
         self.beta = float(beta)
         self.self_excitation = float(self_excitation)
         self.similarity_threshold = float(similarity_threshold)
         self.similarity_scale = float(similarity_scale)
         self.max_radius = float(max_radius)
+        self.device = device
         self.memories: list[MemoryItem] = []
         self.events: list[Event] = []
         self.alpha = np.zeros((0, 0), dtype=float)
@@ -90,14 +92,15 @@ class HawkesMemoryStore:
         time: float | None = None,
         record_event: bool = True,
     ) -> list[RetrievalResult]:
-        if top_k <= 0:
+        if top_k <= 0 or not self.memories:
             return []
         t = self._now(time)
         query = as_1d_float_array(query_embedding)
         intensities = self.intensities(t)
+        embeddings = np.vstack([item.embedding for item in self.memories])
+        similarities = _query_cosine(query, embeddings, device=self.device)
         results: list[RetrievalResult] = []
-        for item, lam in zip(self.memories, intensities):
-            sim = cosine_similarity(query, item.embedding)
+        for item, lam, sim in zip(self.memories, intensities, similarities):
             results.append(
                 RetrievalResult(
                     memory=item,
@@ -179,7 +182,7 @@ class HawkesMemoryStore:
             self.alpha = np.zeros((0, 0), dtype=float)
             return
         embeddings = np.vstack([m.embedding for m in self.memories])
-        sim = pairwise_cosine(embeddings)
+        sim = pairwise_cosine(embeddings, device=self.device)
         alpha = self.similarity_scale * np.maximum(0.0, sim - self.similarity_threshold)
         np.fill_diagonal(alpha, self.self_excitation)
         self.alpha = project_spectral_radius(alpha, self.max_radius)
@@ -191,3 +194,21 @@ class HawkesMemoryStore:
     @staticmethod
     def _now(value: float | None) -> float:
         return float(time_module.time() if value is None else value)
+
+
+def _query_cosine(query: np.ndarray, embeddings: np.ndarray, *, device: str | None) -> np.ndarray:
+    if device is not None and device.lower() != "cpu":
+        try:
+            import torch
+
+            from hawkes_rag.gpu import resolve_torch_device
+        except ImportError:
+            pass
+        else:
+            torch_device = resolve_torch_device(device)
+            query_t = torch.as_tensor(query, dtype=torch.float32, device=torch_device)
+            embeddings_t = torch.as_tensor(embeddings, dtype=torch.float32, device=torch_device)
+            query_t = torch.nn.functional.normalize(query_t[None, :], p=2, dim=1, eps=1e-12)
+            embeddings_t = torch.nn.functional.normalize(embeddings_t, p=2, dim=1, eps=1e-12)
+            return (embeddings_t @ query_t.T).squeeze(1).detach().cpu().numpy().astype(float)
+    return np.asarray([cosine_similarity(query, embedding) for embedding in embeddings], dtype=float)
