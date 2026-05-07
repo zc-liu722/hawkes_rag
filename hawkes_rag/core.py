@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 import numpy as np
+from scipy import sparse
 
 from hawkes_rag.utils import project_spectral_radius
 
@@ -27,7 +28,10 @@ class HawkesParams:
 
     def __post_init__(self) -> None:
         self.mu = np.asarray(self.mu, dtype=float)
-        self.alpha = np.asarray(self.alpha, dtype=float)
+        if sparse.issparse(self.alpha):
+            self.alpha = self.alpha.tocsr().astype(float)
+        else:
+            self.alpha = np.asarray(self.alpha, dtype=float)
         self.beta = float(self.beta)
         if self.mu.ndim != 1:
             raise ValueError("mu must be a 1D vector")
@@ -37,7 +41,11 @@ class HawkesParams:
             raise ValueError("beta must be positive")
         if np.any(self.mu <= 0):
             raise ValueError("all baseline intensities in mu must be positive")
-        if np.any(self.alpha < 0):
+        if sparse.issparse(self.alpha):
+            has_negative_alpha = bool(self.alpha.data.size and np.any(self.alpha.data < 0))
+        else:
+            has_negative_alpha = bool(np.any(self.alpha < 0))
+        if has_negative_alpha:
             raise ValueError("alpha must be non-negative")
 
     @property
@@ -66,13 +74,12 @@ class MultivariateHawkesProcess:
 
     def intensities(self, time: float, history: Iterable[Event]) -> np.ndarray:
         lam = self.params.mu.astype(float).copy()
-        for event in history:
-            if event.time >= time:
-                continue
-            dt = time - event.time
-            lam += self.params.alpha[:, event.memory_id] * event.weight * np.exp(
-                -self.params.beta * dt
-            )
+        times, memory_ids, weights = self._event_arrays(
+            event for event in history if event.time < time
+        )
+        if times.size:
+            decayed_weights = weights * np.exp(-self.params.beta * (time - times))
+            lam += np.asarray(self.params.alpha[:, memory_ids] @ decayed_weights).ravel()
         return np.maximum(lam, 1e-12)
 
     def integrated_intensity(self, horizon: float, history: Iterable[Event]) -> float:
@@ -96,7 +103,10 @@ class MultivariateHawkesProcess:
             return 0.0
         active = self._active_mask(active_memory_ids)
         total = float(np.sum(self.params.mu[active]) * (end - start))
-        alpha_col_sums = np.sum(self.params.alpha[active, :], axis=0)
+        alpha_col_sums = np.asarray(
+            self.params.alpha[active, :].sum(axis=0),
+            dtype=float,
+        ).ravel()
         event_times = []
         event_weights = []
         event_memory_ids = []
@@ -132,12 +142,7 @@ class MultivariateHawkesProcess:
         events_sorted = sorted(events, key=lambda e: e.time)
         active = self._active_mask(active_memory_ids)
         self._validate_events_observed(events_sorted, active)
-        history: list[Event] = []
-        log_terms = 0.0
-        for event in events_sorted:
-            lam = self.intensity(event.memory_id, event.time, history)
-            log_terms += np.log(max(lam, 1e-12))
-            history.append(event)
+        log_terms = self._event_log_terms(events_sorted)
         integral = self.integrated_intensity_interval(
             0.0,
             horizon,
@@ -183,6 +188,37 @@ class MultivariateHawkesProcess:
             active_memory_ids=np.flatnonzero(active),
         )
         return float(log_terms - integral)
+
+    def _event_log_terms(self, events_sorted: list[Event]) -> float:
+        times, memory_ids, weights = self._event_arrays(events_sorted)
+        if times.size == 0:
+            return 0.0
+        dt = times[:, None] - times[None, :]
+        past = dt > 0.0
+        decay = np.exp(-self.params.beta * np.maximum(dt, 0.0)) * past
+        if sparse.issparse(self.params.alpha):
+            alpha_for_events = self.params.alpha[np.ix_(memory_ids, memory_ids)].toarray()
+        else:
+            alpha = np.asarray(self.params.alpha, dtype=float)
+            alpha_for_events = alpha[memory_ids[:, None], memory_ids[None, :]]
+        excitation = np.sum(alpha_for_events * decay * weights[None, :], axis=1)
+        lam = self.params.mu[memory_ids] + excitation
+        return float(np.sum(np.log(np.maximum(lam, 1e-12))))
+
+    @staticmethod
+    def _event_arrays(events: Iterable[Event]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        event_list = list(events)
+        if not event_list:
+            return (
+                np.empty(0, dtype=float),
+                np.empty(0, dtype=int),
+                np.empty(0, dtype=float),
+            )
+        return (
+            np.fromiter((event.time for event in event_list), dtype=float),
+            np.fromiter((event.memory_id for event in event_list), dtype=int),
+            np.fromiter((event.weight for event in event_list), dtype=float),
+        )
 
     def _active_mask(self, active_memory_ids: Iterable[int] | None) -> np.ndarray:
         if active_memory_ids is None:
@@ -234,8 +270,12 @@ def simulate_ogata(
 
 
 def diagonal_only(params: HawkesParams) -> HawkesParams:
+    if sparse.issparse(params.alpha):
+        alpha = sparse.diags(params.alpha.diagonal(), format="csr")
+    else:
+        alpha = np.diag(np.diag(params.alpha))
     return HawkesParams(
         mu=params.mu.copy(),
-        alpha=np.diag(np.diag(params.alpha)),
+        alpha=alpha,
         beta=params.beta,
     )
