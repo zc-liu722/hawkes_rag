@@ -319,6 +319,77 @@ def load_locomo_json(path: str | Path) -> list[list[ConversationMessage]]:
     return conversations
 
 
+def load_official_locomo10_json(path: str | Path) -> list[list[ConversationMessage]]:
+    """Load the official snap-research/locomo `data/locomo10.json` schema.
+
+    The official release stores each sample as:
+
+    - `sample_id`
+    - `conversation.speaker_a` / `conversation.speaker_b`
+    - `conversation.session_<n>_date_time`
+    - `conversation.session_<n>` as a list of turns with `speaker`, `dia_id`, `text`
+
+    This loader is intentionally strict so benchmark runs fail fast if a mirror
+    silently changes shape.
+    """
+    data = json.loads(Path(path).read_text())
+    if not isinstance(data, list):
+        raise ValueError("official LoCoMo data must be a JSON list")
+
+    conversations: list[list[ConversationMessage]] = []
+    for sample_index, sample in enumerate(data):
+        if not isinstance(sample, dict):
+            raise ValueError(f"sample {sample_index} must be an object")
+        sample_id = sample.get("sample_id")
+        conversation = sample.get("conversation")
+        if not isinstance(sample_id, str) or not sample_id:
+            raise ValueError(f"sample {sample_index} is missing string sample_id")
+        if not isinstance(conversation, dict):
+            raise ValueError(f"sample {sample_id} is missing conversation object")
+        for speaker_key in ("speaker_a", "speaker_b"):
+            if not isinstance(conversation.get(speaker_key), str):
+                raise ValueError(f"sample {sample_id} is missing {speaker_key}")
+
+        messages: list[ConversationMessage] = []
+        session_numbers = _official_session_numbers(conversation)
+        if not session_numbers:
+            raise ValueError(f"sample {sample_id} has no session_<n> arrays")
+        for session_position, session_number in enumerate(session_numbers):
+            session_key = f"session_{session_number}"
+            timestamp_key = f"{session_key}_date_time"
+            turns = conversation.get(session_key)
+            if not isinstance(conversation.get(timestamp_key), str):
+                raise ValueError(f"sample {sample_id} is missing {timestamp_key}")
+            if not isinstance(turns, list):
+                raise ValueError(f"sample {sample_id} {session_key} must be a list")
+            for turn_index, turn in enumerate(turns):
+                if not isinstance(turn, dict):
+                    raise ValueError(
+                        f"sample {sample_id} {session_key}[{turn_index}] must be an object"
+                    )
+                speaker = turn.get("speaker")
+                dia_id = turn.get("dia_id")
+                text = turn.get("text")
+                if not isinstance(speaker, str) or not isinstance(dia_id, str):
+                    raise ValueError(
+                        f"sample {sample_id} {session_key}[{turn_index}] needs speaker and dia_id"
+                    )
+                if not isinstance(text, str) or not text.strip():
+                    continue
+                messages.append(
+                    ConversationMessage(
+                        conversation_id=sample_id,
+                        message_id=dia_id,
+                        text=text,
+                        timestamp=float(session_position * 1000 + turn_index),
+                        speaker=speaker,
+                    )
+                )
+        if messages:
+            conversations.append(messages)
+    return conversations
+
+
 def _find_conversations(data: Any) -> list[dict[str, Any]]:
     if isinstance(data, list):
         return [item for item in data if isinstance(item, dict)]
@@ -331,6 +402,15 @@ def _find_conversations(data: Any) -> list[dict[str, Any]]:
     if any(key in data for key in ["messages", "conversation", "dialogue"]):
         return [data]
     raise ValueError("could not find conversations in JSON")
+
+
+def _official_session_numbers(conversation: dict[str, Any]) -> list[int]:
+    numbers = []
+    for key, value in conversation.items():
+        match = re.fullmatch(r"session_(\d+)", key)
+        if match and isinstance(value, list):
+            numbers.append(int(match.group(1)))
+    return sorted(numbers)
 
 
 def _tokens(text: str) -> list[str]:

@@ -9,6 +9,7 @@ from hawkes_rag.locomo import (
     EventizedCorpus,
     HashingEmbedding,
     LoCoMoEventizer,
+    load_official_locomo10_json,
 )
 from hawkes_rag.memory import HawkesMemoryStore, MemoryItem, RetrievalResult
 
@@ -25,6 +26,7 @@ __all__ = [
     "EventizedCorpus",
     "HashingEmbedding",
     "LoCoMoEventizer",
+    "load_official_locomo10_json",
     "temporal_train_test_split",
     "heldout_predictive_log_likelihood",
 ]

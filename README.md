@@ -77,6 +77,27 @@ These are the raw materials for the README/demo GIF: naive RAG versus
 Hawkes-RAG on the same 50-turn memory stream, with the alpha matrix and
 lambda curve visible.
 
+## Baseline Evidence
+
+```bash
+python3 benchmarks/compare_baselines.py
+```
+
+The benchmark runs `naive_retrieve`, `diagonal_hawkes_retrieve`, and the full
+alpha Hawkes retriever on the same synthetic cross-excitation corpus. The
+association probes intentionally query with a cue memory while grading the
+paired target memory, so the test isolates whether off-diagonal alpha matters.
+
+| Retriever | Recall@1 | Recall@3 | MRR | Held-out PLL/event |
+| --- | ---: | ---: | ---: | ---: |
+| `naive_retrieve` | 0.000 | 1.000 | 0.500 | -1.626 |
+| `diagonal_hawkes_retrieve` | 0.000 | 0.000 | 0.250 | -6.717 |
+| `full_alpha_hawkes_retrieve` | 1.000 | 1.000 | 1.000 | -1.242 |
+
+The full-alpha model is the only baseline that can promote the target memory
+from a related cue event, and it also improves held-out predictive
+log-likelihood on the same corpus.
+
 ## LoCoMo Eventization Design
 
 ```bash
@@ -98,10 +119,30 @@ hashing embeddings so the pipeline runs without API keys. The research version
 should replace those two pieces with a Mem0-style or LLM fact extractor plus
 BGE/sentence-transformers embeddings.
 
+## Real LoCoMo Run
+
+```bash
+python3 benchmarks/locomo/download.py
+python3 benchmarks/locomo/run_locomo.py
+```
+
+`download.py` fetches the official `snap-research/locomo` `locomo10.json`.
+`run_locomo.py` pins the official schema, caches the full eventized corpus in
+`outputs/locomo_eventized.json`, and writes the main result to
+`outputs/locomo_results.{json,md}`. The default run uses a balanced 80-fact
+budget across all 10 conversations for a fast repo benchmark; pass
+`--max-facts 0 --fit-mle` for the heavier optimizer path.
+
+Current default run:
+
+| Model | Held-out PLL/event | Held-out PLL total | Held-out events |
+| --- | ---: | ---: | ---: |
+| `naive_zero_alpha` | -10.552 | -1603.920 | 152 |
+| `diagonal_alpha` | -9.759 | -1483.442 | 152 |
+| `full_alpha` | -9.574 | -1455.316 | 152 |
+
 ## Roadmap
 
-- real LoCoMo dataset schema pinning and artifact caching
-- diagonal Hawkes versus low-rank Hawkes benchmark table
 - sentence-transformers/BGE embedding example
 - demo GIF generation script
 - optional SQLite/vector-database backend

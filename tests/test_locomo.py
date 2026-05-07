@@ -4,7 +4,11 @@ import numpy as np
 
 from hawkes_rag.estimation import LowRankHawkesEstimator
 from hawkes_rag.evaluation import heldout_predictive_log_likelihood
-from hawkes_rag.locomo import ConversationMessage, LoCoMoEventizer
+from hawkes_rag.locomo import (
+    ConversationMessage,
+    LoCoMoEventizer,
+    load_official_locomo10_json,
+)
 
 
 def test_locomo_eventizer_builds_facts_events_and_active_masks() -> None:
@@ -52,3 +56,32 @@ def test_locomo_pooled_likelihood_pipeline_smoke() -> None:
     pll = heldout_predictive_log_likelihood(fit.params, corpus.heldout_splits(0.7))
     assert np.isfinite(fit.objective)
     assert np.isfinite(pll.total)
+
+
+def test_official_locomo10_loader_pins_sessions(tmp_path) -> None:
+    path = tmp_path / "locomo10.json"
+    path.write_text(
+        """
+        [
+          {
+            "sample_id": "sample_0",
+            "conversation": {
+              "speaker_a": "Alice",
+              "speaker_b": "Bob",
+              "session_1_date_time": "1 Jan, 2024",
+              "session_1": [
+                {"speaker": "Alice", "dia_id": "d0", "text": "Alice likes green tea."}
+              ],
+              "session_2_date_time": "2 Jan, 2024",
+              "session_2": [
+                {"speaker": "Bob", "dia_id": "d1", "text": "Bob remembers Alice likes tea."}
+              ]
+            }
+          }
+        ]
+        """
+    )
+    conversations = load_official_locomo10_json(path)
+    assert len(conversations) == 1
+    assert [message.message_id for message in conversations[0]] == ["d0", "d1"]
+    assert conversations[0][1].timestamp > conversations[0][0].timestamp
