@@ -8,7 +8,7 @@ import numpy as np
 from scipy import sparse
 
 from hawkes_rag.core import Event, HawkesParams, MultivariateHawkesProcess
-from hawkes_rag.gpu import best_float_dtype, resolve_torch_device
+from hawkes_rag.gpu import adaptive_cuda_chunk_size, best_float_dtype, resolve_torch_device
 
 
 @dataclass(frozen=True)
@@ -104,8 +104,16 @@ def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
     return max(minimum, value)
 
 
-def _likelihood_chunk_size(n_events: int) -> int:
+def _likelihood_chunk_size(torch, device, dtype, n_events: int, n_columns: int) -> int:
     chunk_size = _env_int("HAWKES_RAG_TORCH_CHUNK_SIZE", 1024)
+    chunk_size = adaptive_cuda_chunk_size(
+        torch,
+        device,
+        dtype,
+        n_columns,
+        preferred=chunk_size,
+        minimum=32,
+    )
     return max(1, min(chunk_size, n_events))
 
 
@@ -195,7 +203,7 @@ def _conditional_log_likelihood_torch(
     if n_test:
         test_times = times[n_history:]
         test_ids = memory_ids[n_history:]
-        chunk_size = _likelihood_chunk_size(n_test)
+        chunk_size = _likelihood_chunk_size(torch, device, dtype, n_test, int(times.numel()))
         log_terms = torch.zeros((), dtype=dtype, device=device)
         for start in range(0, n_test, chunk_size):
             end = min(start + chunk_size, n_test)

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import os
 from typing import Any
+
+
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 
 def import_torch():
@@ -34,8 +38,39 @@ def resolve_torch_device(device: str | None = None):
 
 
 def best_float_dtype(torch: Any, device) -> Any:
-    # MPS has much better operator coverage and performance in float32.
-    return torch.float32 if device.type == "mps" else torch.float64
+    requested = os.environ.get("HAWKES_RAG_TORCH_DTYPE", "auto").lower()
+    if requested in {"float64", "fp64", "double"}:
+        return torch.float64
+    if requested in {"float32", "fp32", "single"}:
+        return torch.float32
+    # GPU runs are memory-bound on the likelihood matrices; float32 keeps them
+    # on GPU with much lower peak memory and is also the native fast path.
+    return torch.float64 if device.type == "cpu" else torch.float32
+
+
+def adaptive_cuda_chunk_size(
+    torch: Any,
+    device,
+    dtype,
+    n_columns: int,
+    *,
+    preferred: int,
+    minimum: int = 1,
+) -> int:
+    """Shrink temporary matrix chunks only when CUDA free memory is tight."""
+    preferred = max(minimum, int(preferred))
+    if device.type != "cuda" or n_columns <= 0:
+        return preferred
+    try:
+        torch.cuda.empty_cache()
+        free_bytes, _ = torch.cuda.mem_get_info(device)
+    except Exception:
+        return preferred
+    element_size = torch.empty((), dtype=dtype, device=device).element_size()
+    bytes_per_row = max(1, int(n_columns)) * element_size * 4
+    target_bytes = max(16 * 1024 * 1024, int(free_bytes * 0.50))
+    memory_fit = max(minimum, target_bytes // max(1, bytes_per_row))
+    return max(minimum, min(preferred, int(memory_fit)))
 
 
 def torch_spectral_radius(torch: Any, matrix, *, iterations: int = 32):

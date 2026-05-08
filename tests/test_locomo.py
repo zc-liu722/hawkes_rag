@@ -2,13 +2,21 @@ from __future__ import annotations
 
 import numpy as np
 
-from benchmarks.locomo.run_locomo import batch_intensities_at_times
+from benchmarks.locomo.run_locomo import (
+    add_train_qa_evidence_events,
+    batch_intensities_at_times,
+    qa_train_test_split,
+)
 from hawkes_rag.core import Event, HawkesParams, MultivariateHawkesProcess
 from hawkes_rag.estimation import LowRankHawkesEstimator
 from hawkes_rag.evaluation import heldout_predictive_log_likelihood
 from hawkes_rag.locomo import (
+    AtomicFact,
     ConversationMessage,
+    EventizedConversation,
+    EventizedCorpus,
     LoCoMoEventizer,
+    LoCoMoQAPair,
     load_official_locomo10_json,
     load_official_locomo10_samples,
 )
@@ -136,3 +144,43 @@ def test_batch_intensities_at_times_matches_process() -> None:
     )
     actual = batch_intensities_at_times(params, events, query_times, device="cpu")
     assert np.allclose(actual, expected)
+
+
+def test_train_qa_evidence_events_do_not_include_test_labels() -> None:
+    qa_pairs = [
+        LoCoMoQAPair("What tea does Alice like?", "green tea", ["m0"]),
+        LoCoMoQAPair("Where does Bob jog?", "Riverside Park", ["m1"]),
+    ]
+    assert qa_train_test_split(qa_pairs, 0.5) == (qa_pairs[:1], qa_pairs[1:])
+
+    facts = [
+        AtomicFact(0, "c1", "Alice likes green tea every morning.", "m0", 0.0, np.array([1.0, 0.0])),
+        AtomicFact(1, "c1", "Bob jogs in Riverside Park on Sundays.", "m1", 1.0, np.array([0.0, 1.0])),
+    ]
+    corpus = EventizedCorpus(
+        conversations=[
+            EventizedConversation(
+                conversation_id="c1",
+                messages=[
+                    ConversationMessage("c1", "m0", facts[0].text, 0.0, "Alice"),
+                    ConversationMessage("c1", "m1", facts[1].text, 1.0, "Bob"),
+                ],
+                facts=facts,
+                events=[Event(0.0, 0), Event(1.0, 1)],
+                horizon=2.0,
+                qa_pairs=qa_pairs,
+            )
+        ],
+        facts=facts,
+    )
+
+    augmented = add_train_qa_evidence_events(
+        corpus,
+        qa_train_fraction=0.5,
+        probe_delay_days=7.0,
+        event_weight=2.0,
+    )
+
+    extra_events = augmented.conversations[0].events[2:]
+    assert extra_events == [Event(time=7.0, memory_id=0, weight=2.0)]
+    assert all(event.memory_id != 1 or event.weight == 1.0 for event in augmented.conversations[0].events)

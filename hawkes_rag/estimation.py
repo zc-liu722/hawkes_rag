@@ -9,7 +9,12 @@ from scipy.optimize import minimize
 from scipy import sparse
 
 from hawkes_rag.core import Event, HawkesParams, MultivariateHawkesProcess
-from hawkes_rag.gpu import best_float_dtype, resolve_torch_device, torch_spectral_radius
+from hawkes_rag.gpu import (
+    adaptive_cuda_chunk_size,
+    best_float_dtype,
+    resolve_torch_device,
+    torch_spectral_radius,
+)
 from hawkes_rag.utils import pairwise_cosine, project_spectral_radius
 
 
@@ -746,8 +751,16 @@ def _unpack_low_rank_torch(
     return mu, alpha, beta
 
 
-def _torch_likelihood_chunk_size(n_events: int) -> int:
+def _torch_likelihood_chunk_size(torch, device, dtype, n_events: int) -> int:
     chunk_size = _env_int("HAWKES_RAG_TORCH_CHUNK_SIZE", 1024)
+    chunk_size = adaptive_cuda_chunk_size(
+        torch,
+        device,
+        dtype,
+        n_events,
+        preferred=chunk_size,
+        minimum=32,
+    )
     return max(1, min(chunk_size, n_events))
 
 
@@ -761,7 +774,7 @@ def _torch_log_likelihood(torch, mu, alpha, beta, trajectory: dict[str, object])
         log_terms = torch.zeros((), dtype=mu.dtype, device=mu.device)
     else:
         n_events = int(times.numel())
-        chunk_size = _torch_likelihood_chunk_size(n_events)
+        chunk_size = _torch_likelihood_chunk_size(torch, mu.device, mu.dtype, n_events)
         log_terms = torch.zeros((), dtype=mu.dtype, device=mu.device)
         for start in range(0, n_events, chunk_size):
             end = min(start + chunk_size, n_events)

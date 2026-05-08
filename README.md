@@ -136,9 +136,11 @@ python3 benchmarks/locomo/run_locomo.py
 `outputs/locomo_eventized_<embedding>.json`, and writes the main result to
 `outputs/locomo_results.{json,md}`. Retrieval evaluation uses LoCoMo's QA
 labels: the question is the query and the annotated evidence messages are the
-ground truth. The default run uses all facts, MiniLM embeddings, and MLE with
-conversation-local fitting composed into a sparse global alpha; pass
-`--embedding hashing --no-fit-mle --max-facts 80` for a fast repo benchmark.
+ground truth. Train QA evidence labels add supervised access events, while
+held-out QA labels are used only for retrieval grading. The default run uses
+all facts, MiniLM embeddings, and MLE with conversation-local fitting composed
+into a sparse global alpha; pass `--embedding hashing --no-fit-mle --max-facts
+80` for a fast repo benchmark.
 For GPU acceleration, install the torch extra and use Adam MLE:
 
 ```bash
@@ -150,25 +152,109 @@ python3 benchmarks/locomo/run_locomo.py --optimizer adam --device auto
 is used for local sentence-transformer embeddings, embedding similarity blocks,
 top-k similarity priors, and PyTorch Hawkes optimization.
 
-Current smoke run (`outputs/locomo_results.{json,md}`) used the official
-LoCoMo10 file with deterministic hashing embeddings, `--no-fit-mle`, and
-`--max-facts 80`. The full eventized cache contains 10 conversations, 5,882
-messages, 12,048 facts, and 82,272 events; the smoke evaluation subset keeps 80
-facts and 842 events.
+The LoCoMo benchmark is now retrieval-first. It compares pure semantic
+retrieval (`cosine`), a simple temporal baseline (`cosine_recency`), a
+self-excitation ablation (`diagonal_alpha`), and the full cross-excitation
+model (`full_alpha`). The main success criterion is Recall@5 and MRR on held-out
+QA evidence retrieval, with held-out PLL retained only as an event-model
+diagnostic. The report also includes two lightweight mechanism slices:
+`recurring_evidence` for repeated facts and `linked_evidence` for facts related
+to other active memories.
 
-| Model | Held-out PLL/event | Recall@1 | Recall@5 | MRR |
+Latest LoCoMo result in `outputs/locomo_results.{json,md}`:
+
+- dataset: `benchmarks/locomo/cache/locomo10.json`
+- eventized_cache: `outputs/locomo_eventized_minilm.json` (loaded)
+- conversations: 10
+- messages: 5882
+- facts: 12048
+- events: 164873
+- embedding: `minilm`
+- fit_mode: `low_rank_mle`
+- fit_success: True
+
+| Model | Held-out PLL/event | Held-out PLL total | Held-out events |
+| --- | ---: | ---: | ---: |
+| `naive_zero_alpha` | -5.674 | -428288.406 | 75480 |
+| `diagonal_alpha` | -4.744 | -358043.438 | 75480 |
+| `full_alpha` | 0.046 | 3476.184 | 75480 |
+
+| Model | Recall@1 | Recall@5 | MRR | Retrieval queries |
 | --- | ---: | ---: | ---: | ---: |
-| `naive_zero_alpha` | -5.883 | 0.690 | 0.995 | 0.828 |
-| `diagonal_alpha` | -4.525 | 0.690 | 0.995 | 0.827 |
-| `full_alpha` | -4.413 | 0.690 | 0.995 | 0.827 |
+| `cosine` | 0.197 | 0.389 | 0.300 | 396 |
+| `cosine_recency` | 0.093 | 0.187 | 0.152 | 396 |
+| `diagonal_alpha` | 0.051 | 0.126 | 0.101 | 396 |
+| `full_alpha` | 0.114 | 0.255 | 0.197 | 396 |
 
-The smoke test is successful as a pipeline and modeling check: official data
-loads, eventization writes a reusable cache, QA retrieval grading runs, and
-full-alpha improves held-out predictive log-likelihood over diagonal alpha by
-`+0.112` nats/event with a paired bootstrap 95% CI of `[0.057, 0.177]`.
-Retrieval quality is effectively tied across the three models on this small
-hashing subset, so this run does not yet demonstrate an end-to-end retrieval
-gain. The next validation target is the default full-corpus MiniLM + MLE run.
+| Subset | Model | Recall@1 | Recall@5 | MRR | Queries |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `recurring_evidence` | `cosine` | 0.209 | 0.398 | 0.311 | 354 |
+| `linked_evidence` | `cosine` | 0.200 | 0.391 | 0.304 | 345 |
+| `recurring_evidence` | `cosine_recency` | 0.102 | 0.192 | 0.157 | 354 |
+| `linked_evidence` | `cosine_recency` | 0.096 | 0.177 | 0.151 | 345 |
+| `recurring_evidence` | `diagonal_alpha` | 0.056 | 0.130 | 0.107 | 354 |
+| `linked_evidence` | `diagonal_alpha` | 0.052 | 0.116 | 0.101 | 345 |
+| `recurring_evidence` | `full_alpha` | 0.121 | 0.274 | 0.208 | 354 |
+| `linked_evidence` | `full_alpha` | 0.116 | 0.261 | 0.201 | 345 |
+
+Paired bootstrap CI:
+
+- comparison: `full_alpha_minus_diagonal_alpha`
+- mean_delta_nats_per_event: 4.753
+- bootstrap_std: 0.105
+- ci95: [4.557, 4.959]
+- paired_trajectories: 10
+- bootstrap_samples: 1000
+
+## LoCoMo-Plus Run
+
+```bash
+python3 benchmarks/locomo/run_locomo_plus.py \
+  --data benchmarks/locomo/cache/locomo_plus.json \
+  --embedding minilm \
+  --device auto
+```
+
+For GPU acceleration, use the same pattern as the main LoCoMo runner. The
+Plus runner batch-encodes cue/dialogue/eventization text on the selected
+sentence-transformer device, uses that device for retrieval similarity and
+Hawkes intensity batches, and can run MLE with PyTorch Adam:
+
+```bash
+python3 benchmarks/locomo/run_locomo_plus.py \
+  --data benchmarks/locomo/cache/locomo_plus.json \
+  --embedding minilm \
+  --fit-mle \
+  --optimizer adam \
+  --device auto
+```
+
+Latest LoCoMo-Plus result in `outputs/locomo_plus_results.{json,md}`:
+
+- dataset: `benchmarks/locomo/cache/locomo_plus.json`
+- probes: 401
+- conversations: 401
+- facts: 779
+- events: 851
+- embedding: `minilm`
+- fit_mode: `stable_similarity_alpha`
+- fusion_gamma: 0.2
+
+| Model | Recall@1 | Recall@5 | MRR | Queries |
+| --- | ---: | ---: | ---: | ---: |
+| `cosine` | 1.000 | 1.000 | 1.000 | 401 |
+| `cosine_recency` | 1.000 | 1.000 | 1.000 | 401 |
+| `diagonal_alpha` | 1.000 | 1.000 | 1.000 | 401 |
+| `full_alpha` | 1.000 | 1.000 | 1.000 | 401 |
+| `zero_alpha` | 1.000 | 1.000 | 1.000 | 401 |
+
+| Bucket | Model | Recall@1 | Recall@5 | MRR | Queries |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `gap_unknown` | `cosine` | 1.000 | 1.000 | 1.000 | 401 |
+| `gap_unknown` | `cosine_recency` | 1.000 | 1.000 | 1.000 | 401 |
+| `gap_unknown` | `diagonal_alpha` | 1.000 | 1.000 | 1.000 | 401 |
+| `gap_unknown` | `full_alpha` | 1.000 | 1.000 | 1.000 | 401 |
+| `gap_unknown` | `zero_alpha` | 1.000 | 1.000 | 1.000 | 401 |
 
 ## Roadmap
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -18,7 +20,7 @@ from hawkes_rag.core import Event, HawkesParams, MultivariateHawkesProcess, diag
 from hawkes_rag.embeddings import EmbeddingFn, make_embedding_fn
 from hawkes_rag.estimation import LowRankHawkesEstimator
 from hawkes_rag.evaluation import heldout_predictive_log_likelihood
-from hawkes_rag.gpu import best_float_dtype, resolve_torch_device
+from hawkes_rag.gpu import adaptive_cuda_chunk_size, best_float_dtype, resolve_torch_device
 from hawkes_rag.memory import _query_cosine
 from hawkes_rag.locomo import (
     AtomicFact,
@@ -44,6 +46,21 @@ EVENTIZED_SCHEMA = "hawkes_rag.eventized_locomo.v3"
 
 def _log(message: str) -> None:
     print(f"[locomo] {message}", flush=True)
+
+
+def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
+    raw_value = os.environ.get(name, str(default))
+    try:
+        value = int(raw_value)
+    except ValueError:
+        value = default
+    return max(minimum, value)
+
+
+def configure_huggingface_defaults(model_cache_dir: Path) -> None:
+    os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+    os.environ.setdefault("HF_HOME", str(model_cache_dir / "hf_home"))
+    os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", str(model_cache_dir / "sentence_transformers"))
 
 
 def _corpus_summary(corpus: EventizedCorpus) -> str:
@@ -136,6 +153,12 @@ def main() -> None:
         help="Directory for downloaded sentence-transformers models, reused across runs.",
     )
     parser.add_argument(
+        "--embedding-batch-size",
+        type=int,
+        default=16,
+        help="Sentence-transformers encode batch size. Default is one GPU-memory step below 32.",
+    )
+    parser.add_argument(
         "--max-facts",
         type=int,
         default=0,
@@ -147,6 +170,30 @@ def main() -> None:
         type=float,
         default=7.0,
         help="Evaluate QA retrieval after the latest evidence time plus this delay.",
+    )
+    parser.add_argument(
+        "--qa-train-fraction",
+        type=float,
+        default=0.8,
+        help="Per-conversation QA fraction used only to add supervised evidence access events.",
+    )
+    parser.add_argument(
+        "--qa-split-seed",
+        type=int,
+        default=0,
+        help="Seed for deterministic per-conversation QA train/test splitting.",
+    )
+    parser.add_argument(
+        "--evidence-event-weight",
+        type=float,
+        default=1.0,
+        help="Weight for access events added from train QA evidence labels.",
+    )
+    parser.add_argument(
+        "--fusion-gamma",
+        type=float,
+        default=0.2,
+        help="Weight for z-scored log temporal intensity in retrieval scoring.",
     )
     parser.add_argument("--refresh-cache", action="store_true")
     args = parser.parse_args()
@@ -164,11 +211,15 @@ def main() -> None:
 
     if args.embedding != "hashing":
         args.model_cache_dir.mkdir(parents=True, exist_ok=True)
+        configure_huggingface_defaults(args.model_cache_dir)
         _log(f"Using embedding model cache: {args.model_cache_dir}")
+        _log(f"Using Hugging Face endpoint: {os.environ['HF_ENDPOINT']}")
+        _log(f"Using Hugging Face home: {os.environ['HF_HOME']}")
     _log("Initializing embedding backend")
     embedding_fn = make_embedding_fn(
         args.embedding,
         device=args.device,
+        batch_size=args.embedding_batch_size,
         cache_dir=args.model_cache_dir if args.embedding != "hashing" else None,
     )
 
@@ -201,6 +252,16 @@ def main() -> None:
         _log(f"Limiting corpus to max_facts={args.max_facts}")
         corpus = limit_corpus_facts(corpus, args.max_facts)
         _log(f"Limited corpus ready ({_corpus_summary(corpus)})")
+
+    _log("Adding train-QA evidence access events for supervised retrieval calibration")
+    corpus = add_train_qa_evidence_events(
+        corpus,
+        qa_train_fraction=args.qa_train_fraction,
+        qa_split_seed=args.qa_split_seed,
+        probe_delay_days=args.qa_probe_delay_days,
+        event_weight=args.evidence_event_weight,
+    )
+    _log(f"QA-calibrated corpus ready ({_corpus_summary(corpus)})")
 
     _log("Preparing embedding matrix")
     embeddings = corpus.embeddings()
@@ -303,12 +364,15 @@ def main() -> None:
         corpus,
         embedding_fn,
         {
-            "naive_zero_alpha": naive_params,
+            "cosine": None,
+            "cosine_recency": full_params,
             "diagonal_alpha": diagonal_params,
             "full_alpha": full_params,
         },
-        train_fraction=args.train_fraction,
+        qa_train_fraction=args.qa_train_fraction,
+        qa_split_seed=args.qa_split_seed,
         probe_delay_days=args.qa_probe_delay_days,
+        fusion_gamma=args.fusion_gamma,
         device=args.device,
     )
     _log("Running paired bootstrap delta CI")
@@ -336,6 +400,10 @@ def main() -> None:
         "max_facts": args.max_facts,
         "embedding": args.embedding,
         "qa_probe_delay_days": args.qa_probe_delay_days,
+        "qa_train_fraction": args.qa_train_fraction,
+        "qa_split_seed": args.qa_split_seed,
+        "evidence_event_weight": args.evidence_event_weight,
+        "fusion_gamma": args.fusion_gamma,
         "dense_threshold": args.dense_threshold,
         "n_events": sum(len(conversation.events) for conversation in corpus.conversations),
         "n_events_full_cache": sum(
@@ -377,68 +445,257 @@ def pll_row(name: str, pll) -> dict[str, Any]:
     }
 
 
+def qa_train_test_split(
+    qa_pairs: list[Any],
+    train_fraction: float,
+    *,
+    seed: int | None = None,
+    key: str = "",
+) -> tuple[list[Any], list[Any]]:
+    if not (0.0 <= train_fraction < 1.0):
+        raise ValueError("qa_train_fraction must be in [0, 1)")
+    if len(qa_pairs) <= 1:
+        return [], qa_pairs
+    ordered_pairs = list(qa_pairs)
+    if seed is not None:
+        digest = hashlib.sha1(f"{seed}:{key}".encode("utf-8")).hexdigest()
+        rng = np.random.default_rng(int(digest[:16], 16))
+        order = rng.permutation(len(ordered_pairs))
+        ordered_pairs = [ordered_pairs[int(index)] for index in order]
+    train_count = int(len(qa_pairs) * train_fraction)
+    train_count = min(max(train_count, 1), len(qa_pairs) - 1)
+    return ordered_pairs[:train_count], ordered_pairs[train_count:]
+
+
+def facts_by_message_id(facts: list[AtomicFact]) -> dict[str, list[AtomicFact]]:
+    grouped: dict[str, list[AtomicFact]] = {}
+    for fact in facts:
+        grouped.setdefault(fact.source_message_id, []).append(fact)
+    return grouped
+
+
+def evidence_facts_for_qa(
+    qa_pair: Any,
+    grouped_facts: dict[str, list[AtomicFact]],
+) -> list[AtomicFact]:
+    return [
+        fact
+        for evidence_id in _qa_evidence_message_ids(qa_pair)
+        for fact in grouped_facts.get(evidence_id, [])
+    ]
+
+
+def add_train_qa_evidence_events(
+    corpus: EventizedCorpus,
+    *,
+    qa_train_fraction: float,
+    probe_delay_days: float,
+    event_weight: float,
+    qa_split_seed: int | None = None,
+) -> EventizedCorpus:
+    conversations = []
+    for conversation in corpus.conversations:
+        grouped = facts_by_message_id(conversation.facts)
+        train_qas, _ = qa_train_test_split(
+            _conversation_qa_pairs(conversation),
+            qa_train_fraction,
+            seed=qa_split_seed,
+            key=conversation.conversation_id,
+        )
+        added_events = []
+        for qa_pair in train_qas:
+            evidence_facts = evidence_facts_for_qa(qa_pair, grouped)
+            if not evidence_facts:
+                continue
+            access_time = max(fact.source_time for fact in evidence_facts) + probe_delay_days
+            for fact in evidence_facts:
+                added_events.append(Event(time=access_time, memory_id=fact.id, weight=event_weight))
+        events = sorted([*conversation.events, *added_events], key=lambda event: event.time)
+        horizon = max(
+            [conversation.horizon, *[event.time + 1e-4 for event in added_events]],
+            default=conversation.horizon,
+        )
+        conversations.append(
+            _make_eventized_conversation(
+                conversation_id=conversation.conversation_id,
+                messages=conversation.messages,
+                facts=conversation.facts,
+                events=events,
+                horizon=float(horizon),
+                qa_pairs=_conversation_qa_pairs(conversation),
+            )
+        )
+    return EventizedCorpus(conversations=conversations, facts=corpus.facts)
+
+
+def _combine_semantic_and_temporal(
+    similarities: np.ndarray,
+    intensities: np.ndarray,
+    *,
+    gamma: float,
+) -> np.ndarray:
+    if similarities.size == 0:
+        return similarities
+    log_intensity = np.log(np.maximum(intensities, 1e-12))
+    std = float(np.std(log_intensity))
+    if std <= 1e-12:
+        return similarities.copy()
+    temporal = (log_intensity - float(np.mean(log_intensity))) / std
+    return similarities + gamma * temporal
+
+
+def _metric_row(model: str, subset: str, hits: dict[int, int], reciprocal_ranks: list[float], n_queries: int) -> dict[str, Any]:
+    return {
+        "model": model,
+        "subset": subset,
+        "queries": n_queries,
+        "recall_at_1": hits[1] / max(n_queries, 1),
+        "recall_at_5": hits[5] / max(n_queries, 1),
+        "mrr": float(np.mean(reciprocal_ranks)) if reciprocal_ranks else 0.0,
+    }
+
+
+def diagnostic_subsets(
+    evidence_facts: list[AtomicFact],
+    facts: list[AtomicFact],
+    events: list[Event],
+    query_time: float,
+    fact_embeddings: np.ndarray,
+    fact_ids: np.ndarray,
+) -> set[str]:
+    evidence_ids = {fact.id for fact in evidence_facts}
+    past_events = [event for event in events if event.time < query_time]
+    counts: dict[int, int] = {}
+    for event in past_events:
+        counts[event.memory_id] = counts.get(event.memory_id, 0) + 1
+
+    subsets = set()
+    if any(counts.get(fact.id, 0) >= 2 for fact in evidence_facts):
+        subsets.add("recurring_evidence")
+
+    active_related_ids = {
+        event.memory_id
+        for event in past_events
+        if event.memory_id not in evidence_ids and counts.get(event.memory_id, 0) >= 1
+    }
+    if active_related_ids and facts:
+        id_to_index = {int(fact_id): index for index, fact_id in enumerate(fact_ids)}
+        active_indices = [
+            id_to_index[memory_id]
+            for memory_id in active_related_ids
+            if memory_id in id_to_index
+        ]
+        evidence_indices = [
+            id_to_index[fact.id]
+            for fact in evidence_facts
+            if fact.id in id_to_index
+        ]
+        if active_indices and evidence_indices:
+            active_embeddings = fact_embeddings[active_indices]
+            for evidence_index in evidence_indices:
+                sims = _query_cosine(fact_embeddings[evidence_index], active_embeddings, device="cpu")
+                if bool(np.any(sims >= 0.55)):
+                    subsets.add("linked_evidence")
+                    break
+    return subsets
+
+
 def retrieval_metrics(
     corpus: EventizedCorpus,
     embedding_fn: EmbeddingFn,
-    params_by_model: dict[str, HawkesParams],
+    params_by_model: dict[str, HawkesParams | None],
     *,
-    train_fraction: float,
+    qa_train_fraction: float,
+    qa_split_seed: int | None,
     probe_delay_days: float,
+    fusion_gamma: float,
     device: str | None,
     top_ks: tuple[int, ...] = (1, 5),
-) -> list[dict[str, Any]]:
+) -> dict[str, list[dict[str, Any]]]:
     rows = []
+    diagnostics = []
     for model, params in params_by_model.items():
         model_started = time.perf_counter()
         _log(f"Retrieval model={model} started")
         hits = {k: 0 for k in top_ks}
         reciprocal_ranks = []
+        subset_hits = {
+            "recurring_evidence": {k: 0 for k in top_ks},
+            "linked_evidence": {k: 0 for k in top_ks},
+        }
+        subset_rr = {"recurring_evidence": [], "linked_evidence": []}
+        subset_queries = {"recurring_evidence": 0, "linked_evidence": 0}
         n_queries = 0
         for conversation_index, conversation in enumerate(corpus.conversations, start=1):
             conversation_started = time.perf_counter()
-            qa_pairs = _conversation_qa_pairs(conversation)
+            _, qa_pairs = qa_train_test_split(
+                _conversation_qa_pairs(conversation),
+                qa_train_fraction,
+                seed=qa_split_seed,
+                key=conversation.conversation_id,
+            )
             if not qa_pairs:
                 continue
             facts = sorted(conversation.facts, key=lambda fact: fact.id)
             fact_ids = np.asarray([fact.id for fact in facts], dtype=int)
             fact_times = np.asarray([fact.source_time for fact in facts], dtype=float)
             fact_embeddings = np.vstack([fact.embedding for fact in facts]) if facts else np.empty((0, 0))
-            facts_by_message_id: dict[str, list[AtomicFact]] = {}
-            for fact in facts:
-                facts_by_message_id.setdefault(fact.source_message_id, []).append(fact)
+            grouped = facts_by_message_id(facts)
             query_payloads = []
             for qa_pair in qa_pairs:
-                evidence_facts = [
-                    fact
-                    for evidence_id in _qa_evidence_message_ids(qa_pair)
-                    for fact in facts_by_message_id.get(evidence_id, [])
-                ]
+                evidence_facts = evidence_facts_for_qa(qa_pair, grouped)
                 if evidence_facts:
+                    query_time = max(fact.source_time for fact in evidence_facts) + probe_delay_days
                     query_payloads.append(
                         (
                             qa_pair,
                             evidence_facts,
-                            max(fact.source_time for fact in evidence_facts) + probe_delay_days,
+                            query_time,
+                            diagnostic_subsets(
+                                evidence_facts,
+                                facts,
+                                conversation.events,
+                                query_time,
+                                fact_embeddings,
+                                fact_ids,
+                            ),
                         )
                     )
-            query_times = [query_time for _, _, query_time in query_payloads]
-            batch_intensities = batch_intensities_at_times(
-                params,
-                conversation.events,
-                query_times,
-                device=device,
-            )
+            query_times = [query_time for _, _, query_time, _ in query_payloads]
+            batch_intensities = None
+            if params is not None and model != "cosine":
+                batch_intensities = batch_intensities_at_times(
+                    params,
+                    conversation.events,
+                    query_times,
+                    device=device,
+                )
             conversation_queries = 0
-            for query_index, (qa_pair, evidence_facts, query_time) in enumerate(query_payloads):
+            for query_index, (qa_pair, evidence_facts, query_time, subsets) in enumerate(query_payloads):
                 query = embedding_fn(_qa_question(qa_pair))
-                intensities = batch_intensities[query_index]
                 visible = fact_times <= query_time
                 if not np.any(visible):
                     continue
                 sims = _query_cosine(query, fact_embeddings[visible], device=device)
-                scores = sims * intensities[fact_ids[visible]]
+                visible_ids = fact_ids[visible]
+                if model == "cosine":
+                    scores = sims
+                elif model == "cosine_recency":
+                    if params is None:
+                        raise ValueError("cosine_recency requires params for beta")
+                    recency = np.exp(-params.beta * np.maximum(query_time - fact_times[visible], 0.0))
+                    scores = _combine_semantic_and_temporal(sims, recency, gamma=fusion_gamma)
+                else:
+                    if batch_intensities is None:
+                        raise ValueError(f"{model} requires Hawkes intensities")
+                    intensities = batch_intensities[query_index]
+                    scores = _combine_semantic_and_temporal(
+                        sims,
+                        intensities[visible_ids],
+                        gamma=fusion_gamma,
+                    )
                 order = np.argsort(-scores)
-                ranked_ids = [int(fact_id) for fact_id in fact_ids[visible][order]]
+                ranked_ids = [int(fact_id) for fact_id in visible_ids[order]]
                 ground_truth_ids = {fact.id for fact in evidence_facts}
                 n_queries += 1
                 conversation_queries += 1
@@ -451,23 +708,32 @@ def retrieval_metrics(
                     if fact_id in ranked_ids
                 ]
                 rank = min(ranks) if ranks else 0
-                reciprocal_ranks.append(0.0 if rank == 0 else 1.0 / rank)
+                reciprocal_rank = 0.0 if rank == 0 else 1.0 / rank
+                reciprocal_ranks.append(reciprocal_rank)
+                for subset in subsets:
+                    subset_queries[subset] += 1
+                    subset_rr[subset].append(reciprocal_rank)
+                    for k in top_ks:
+                        if ground_truth_ids.intersection(ranked_ids[:k]):
+                            subset_hits[subset][k] += 1
             _log(
                 f"Retrieval model={model} conversation={conversation_index}/{len(corpus.conversations)} "
                 f"queries={conversation_queries} cumulative_queries={n_queries} "
                 f"elapsed={time.perf_counter() - conversation_started:.1f}s"
             )
-        rows.append(
-            {
-                "model": model,
-                "queries": n_queries,
-                "recall_at_1": hits[1] / max(n_queries, 1),
-                "recall_at_5": hits[5] / max(n_queries, 1),
-                "mrr": float(np.mean(reciprocal_ranks)) if reciprocal_ranks else 0.0,
-            }
-        )
+        rows.append(_metric_row(model, "all_test_qa", hits, reciprocal_ranks, n_queries))
+        for subset in ("recurring_evidence", "linked_evidence"):
+            diagnostics.append(
+                _metric_row(
+                    model,
+                    subset,
+                    subset_hits[subset],
+                    subset_rr[subset],
+                    subset_queries[subset],
+                )
+            )
         _log(f"Retrieval model={model} done queries={n_queries} elapsed={time.perf_counter() - model_started:.1f}s")
-    return rows
+    return {"overall": rows, "diagnostics": diagnostics}
 
 
 def batch_intensities_at_times(
@@ -487,9 +753,24 @@ def batch_intensities_at_times(
         else:
             torch_device = resolve_torch_device(device)
             dtype = best_float_dtype(torch, torch_device)
-            query_times_t = torch.as_tensor(query_times, dtype=dtype, device=torch_device)
+            alpha_np = params.alpha.toarray() if sparse.issparse(params.alpha) else params.alpha
+            alpha_t = torch.as_tensor(alpha_np, dtype=dtype, device=torch_device)
+            mu_t = torch.as_tensor(params.mu, dtype=dtype, device=torch_device)
+            query_chunk_size = adaptive_cuda_chunk_size(
+                torch,
+                torch_device,
+                dtype,
+                len(events),
+                preferred=_env_int("HAWKES_RAG_RETRIEVAL_QUERY_CHUNK_SIZE", 64),
+                minimum=8,
+            )
+            batches = []
             if events:
-                event_times = torch.as_tensor([event.time for event in events], dtype=dtype, device=torch_device)
+                event_times = torch.as_tensor(
+                    [event.time for event in events],
+                    dtype=dtype,
+                    device=torch_device,
+                )
                 event_ids = torch.as_tensor(
                     [event.memory_id for event in events],
                     dtype=torch.long,
@@ -500,31 +781,36 @@ def batch_intensities_at_times(
                     dtype=dtype,
                     device=torch_device,
                 )
-                dt = query_times_t[:, None] - event_times[None, :]
-                past = dt > 0.0
-                decayed = torch.exp(-torch.as_tensor(params.beta, dtype=dtype, device=torch_device) * torch.clamp(dt, min=0.0))
-                decayed = decayed * past.to(dtype) * event_weights[None, :]
-                excitation_by_memory = torch.zeros(
-                    (len(query_times), params.n_memories),
-                    dtype=dtype,
-                    device=torch_device,
-                )
-                excitation_by_memory.scatter_add_(
-                    1,
-                    event_ids[None, :].expand(len(query_times), -1),
-                    decayed,
-                )
+                beta_t = torch.as_tensor(params.beta, dtype=dtype, device=torch_device)
+                with torch.inference_mode():
+                    for start in range(0, len(query_times), query_chunk_size):
+                        query_times_t = torch.as_tensor(
+                            query_times[start : start + query_chunk_size],
+                            dtype=dtype,
+                            device=torch_device,
+                        )
+                        dt = query_times_t[:, None] - event_times[None, :]
+                        past = dt > 0.0
+                        decayed = torch.exp(-beta_t * torch.clamp(dt, min=0.0))
+                        decayed = decayed * past.to(dtype) * event_weights[None, :]
+                        excitation_by_memory = torch.zeros(
+                            (len(query_times_t), params.n_memories),
+                            dtype=dtype,
+                            device=torch_device,
+                        )
+                        excitation_by_memory.scatter_add_(
+                            1,
+                            event_ids[None, :].expand(len(query_times_t), -1),
+                            decayed,
+                        )
+                        intensities = mu_t[None, :] + excitation_by_memory @ alpha_t.T
+                        batches.append(torch.clamp(intensities, min=1e-12).detach().cpu())
             else:
-                excitation_by_memory = torch.zeros(
-                    (len(query_times), params.n_memories),
-                    dtype=dtype,
-                    device=torch_device,
-                )
-            alpha_np = params.alpha.toarray() if sparse.issparse(params.alpha) else params.alpha
-            alpha_t = torch.as_tensor(alpha_np, dtype=dtype, device=torch_device)
-            mu_t = torch.as_tensor(params.mu, dtype=dtype, device=torch_device)
-            intensities = mu_t[None, :] + excitation_by_memory @ alpha_t.T
-            return torch.clamp(intensities, min=1e-12).detach().cpu().numpy().astype(float)
+                with torch.inference_mode():
+                    for start in range(0, len(query_times), query_chunk_size):
+                        size = len(query_times[start : start + query_chunk_size])
+                        batches.append(mu_t[None, :].expand(size, -1).detach().cpu())
+            return torch.cat(batches, dim=0).numpy().astype(float)
     process = MultivariateHawkesProcess(params)
     return np.vstack(
         [
@@ -601,6 +887,10 @@ def format_markdown(result: dict[str, Any]) -> str:
         f"- max_facts: {result['max_facts']} (`0` means full corpus)",
         f"- embedding: `{result['embedding']}`",
         f"- qa_probe_delay_days: {result['qa_probe_delay_days']}",
+        f"- qa_train_fraction: {result['qa_train_fraction']}",
+        f"- qa_split_seed: {result['qa_split_seed']}",
+        f"- evidence_event_weight: {result['evidence_event_weight']}",
+        f"- fusion_gamma: {result['fusion_gamma']}",
         f"- dense_threshold: {result['dense_threshold']}",
         f"- events: {result['n_events']}",
         f"- events_full_cache: {result['n_events_full_cache']}",
@@ -622,10 +912,24 @@ def format_markdown(result: dict[str, Any]) -> str:
             "| --- | ---: | ---: | ---: | ---: |",
         ]
     )
-    for row in result["retrieval"]:
+    for row in result["retrieval"]["overall"]:
         lines.append(
             f"| `{row['model']}` | {row['recall_at_1']:.3f} | {row['recall_at_5']:.3f} | "
             f"{row['mrr']:.3f} | {row['queries']} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Mechanism Diagnostics",
+            "",
+            "| Subset | Model | Recall@1 | Recall@5 | MRR | Queries |",
+            "| --- | --- | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for row in result["retrieval"]["diagnostics"]:
+        lines.append(
+            f"| `{row['subset']}` | `{row['model']}` | {row['recall_at_1']:.3f} | "
+            f"{row['recall_at_5']:.3f} | {row['mrr']:.3f} | {row['queries']} |"
         )
     boot = result["paired_bootstrap"]
     lines.extend(
