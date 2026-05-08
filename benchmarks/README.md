@@ -89,6 +89,7 @@ retrieval-first probe for that category:
 python3 benchmarks/locomo/run_locomo_plus.py \
   --data benchmarks/locomo/cache/locomo_plus.json \
   --embedding minilm \
+  --optimizer adam \
   --device auto
 ```
 
@@ -109,11 +110,46 @@ the trigger retrieves the cue/evidence facts, and writes:
 - `outputs/locomo_plus_results.json`
 - `outputs/locomo_plus_results.md`
 
-Use `--embedding hashing --max-probes 20` for a fast smoke run and
-`--embedding minilm` or `--embedding bge` for a real semantic retrieval run.
-The Plus runner follows the main LoCoMo GPU path: `--device auto` selects CUDA,
-then Apple MPS, then CPU for sentence-transformer eventization batches,
-retrieval similarity, and Hawkes intensity scoring. Add `--fit-mle --optimizer
-adam` to run low-rank Hawkes MLE with PyTorch on the selected device. The
-default is intentionally retrieval-only; it does not call an LLM judge for
-final answer correctness.
+Use `--embedding hashing --max-probes 20 --no-fit-mle` only for a fast smoke
+run and `--embedding minilm` or `--embedding bge` for a real semantic retrieval
+run. The Plus runner follows the main LoCoMo GPU path: it fits low-rank Hawkes
+MLE by default, while `--device auto` selects CUDA, then Apple MPS, then CPU for
+sentence-transformer eventization batches, retrieval similarity, and Hawkes
+intensity scoring. Use `--optimizer adam` to run the MLE fit with PyTorch on
+the selected device. The runner does not call an LLM judge for final answer
+correctness.
+
+To tune semantic/temporal fusion without refitting for every setting, run the
+fusion sweep script. It eventizes and fits once, then evaluates each listed
+`fusion_gamma` value:
+
+```bash
+python3 benchmarks/locomo/sweep_locomo_plus_fusion.py \
+  --embedding minilm \
+  --optimizer adam \
+  --device auto \
+  --gammas 0,0.01,0.02,0.05,0.1,0.2
+```
+
+It writes `outputs/locomo_plus_fusion_sweep.{json,md}`. Use
+`--embedding hashing --max-probes 20 --no-fit-mle` for a smoke sweep.
+
+## LongMemEval
+
+The LongMemEval probe checks whether multi-session questions contain the
+semantic-thin, cross-evidence structure where cross-excitation should help:
+
+```bash
+python3 benchmarks/longmemeval/download.py
+python3 benchmarks/longmemeval/analyze_cross_evidence.py --embedding minilm --device auto
+```
+
+It writes:
+
+- `outputs/longmemeval_cross_evidence_analysis.json`
+- `outputs/longmemeval_cross_evidence_analysis.md`
+
+The analysis reports the multi-session subset size, hop distribution by
+evidence session count, query-to-evidence cosine distributions for each
+multi-session question, cross-evidence cosine distributions, and the go/no-go
+decision for Phase 1.

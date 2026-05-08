@@ -9,3 +9,4 @@ build/
 *.egg-info/
 outputs/
 .DS_Store
+benchmarks/pollen_test/

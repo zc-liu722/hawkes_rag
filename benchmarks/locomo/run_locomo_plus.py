@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from scipy import sparse
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -20,7 +21,6 @@ if str(ROOT) not in sys.path:
 
 from benchmarks.locomo.run_locomo import (  # noqa: E402
     _combine_semantic_and_temporal,
-    batch_intensities_at_times,
     configure_huggingface_defaults,
     diagonal_only,
     estimate_mu,
@@ -63,7 +63,7 @@ class CachedEmbeddingFn:
 
     def __init__(self, embedding_fn: EmbeddingFn, *, batch_size: int, log_prefix: str = "Embedding"):
         self.embedding_fn = embedding_fn
-        self.batch_size = int(batch_size)
+        self.batch_size = max(1, int(batch_size))
         self.log_prefix = log_prefix
         self.cache: dict[str, np.ndarray] = {}
 
@@ -78,19 +78,68 @@ class CachedEmbeddingFn:
             return
         model = getattr(self.embedding_fn, "model", None)
         if model is not None and hasattr(model, "encode"):
-            _log(f"{self.log_prefix}: batch-encoding {len(pending)} texts")
-            vectors = model.encode(
-                pending,
-                normalize_embeddings=True,
-                batch_size=getattr(self.embedding_fn, "batch_size", self.batch_size),
-                convert_to_numpy=True,
+            requested_batch_size = max(
+                1,
+                int(getattr(self.embedding_fn, "batch_size", self.batch_size)),
             )
-            for text, vector in zip(pending, vectors):
-                self.cache[text] = np.asarray(vector, dtype=float)
+            current_batch_size = requested_batch_size
+            _log(
+                f"{self.log_prefix}: batch-encoding {len(pending)} texts "
+                f"batch_size={current_batch_size}"
+            )
+            index = 0
+            while index < len(pending):
+                batch = pending[index : index + current_batch_size]
+                try:
+                    vectors = model.encode(
+                        batch,
+                        normalize_embeddings=True,
+                        batch_size=current_batch_size,
+                        convert_to_numpy=True,
+                    )
+                except RuntimeError as exc:
+                    if not _is_torch_oom(exc) or current_batch_size <= 1:
+                        raise
+                    _clear_torch_cache()
+                    next_batch_size = max(1, current_batch_size // 2)
+                    _log(
+                        f"{self.log_prefix}: OOM at batch_size={current_batch_size}; "
+                        f"retrying with batch_size={next_batch_size}"
+                    )
+                    current_batch_size = next_batch_size
+                    continue
+                for text, vector in zip(batch, vectors):
+                    self.cache[text] = np.asarray(vector, dtype=float)
+                index += len(batch)
+                if index == len(pending) or index % max(current_batch_size * 20, 500) == 0:
+                    _log(
+                        f"{self.log_prefix}: encoded {index}/{len(pending)} texts "
+                        f"batch_size={current_batch_size}"
+                    )
             return
         _log(f"{self.log_prefix}: caching {len(pending)} texts")
         for text in pending:
             self.cache[text] = np.asarray(self.embedding_fn(text), dtype=float)
+
+
+def _is_torch_oom(exc: RuntimeError) -> bool:
+    message = str(exc).lower()
+    return "out of memory" in message or "cuda error: out of memory" in message
+
+
+def _clear_torch_cache() -> None:
+    try:
+        import torch
+    except ImportError:
+        return
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    mps = getattr(torch, "mps", None)
+    if mps is not None and hasattr(mps, "empty_cache"):
+        try:
+            mps.empty_cache()
+        except Exception:
+            pass
 
 
 def _log(message: str) -> None:
@@ -153,8 +202,8 @@ def main() -> None:
     parser.add_argument(
         "--fit-mle",
         action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Fit low-rank Hawkes MLE. Default uses a stable similarity-alpha smoke baseline.",
+        default=True,
+        help="Fit low-rank Hawkes MLE; use --no-fit-mle only for the stable similarity-alpha smoke fallback.",
     )
     parser.add_argument("--fusion-gamma", type=float, default=0.2)
     parser.add_argument("--probe-delay-days", type=float, default=0.0)
@@ -264,7 +313,7 @@ def main() -> None:
         "full_alpha": params,
         "zero_alpha": HawkesParams(
             mu=estimate_mu(corpus.trajectories(), corpus.horizons(), corpus.n_memories),
-            alpha=np.zeros((corpus.n_memories, corpus.n_memories), dtype=float),
+            alpha=sparse.csr_matrix((corpus.n_memories, corpus.n_memories), dtype=float),
             beta=params.beta,
         ),
     }
@@ -842,15 +891,15 @@ def retrieval_metrics(
             else:
                 if params is None:
                     raise ValueError(f"{model} requires Hawkes parameters")
-                intensities = batch_intensities_at_times(
+                intensities = visible_intensities_at_time(
                     params,
                     conversation.events,
-                    [query_time],
-                    device=device,
-                )[0]
+                    query_time,
+                    visible_ids,
+                )
                 scores = _combine_semantic_and_temporal(
                     sims,
-                    intensities[visible_ids],
+                    intensities,
                     gamma=fusion_gamma,
                 )
             ranked_ids = [int(fact_id) for fact_id in visible_ids[np.argsort(-scores)]]
@@ -874,6 +923,32 @@ def retrieval_metrics(
         for bucket, stats in sorted(gap_stats.items()):
             by_gap.append(metric_row(model, bucket, stats["hits"], stats["rr"], stats["queries"]))
     return {"overall": rows, "by_time_gap": by_gap}
+
+
+def visible_intensities_at_time(
+    params: HawkesParams,
+    events: list[Event],
+    query_time: float,
+    visible_ids: np.ndarray,
+) -> np.ndarray:
+    """Score only visible facts, avoiding global dense alpha materialization."""
+    visible_ids = np.asarray(visible_ids, dtype=int)
+    if visible_ids.size == 0:
+        return np.empty((0,), dtype=float)
+    intensities = np.asarray(params.mu[visible_ids], dtype=float).copy()
+    past_events = [event for event in events if event.time < query_time]
+    if not past_events:
+        return np.maximum(intensities, 1e-12)
+    event_ids = np.asarray([event.memory_id for event in past_events], dtype=int)
+    event_weights = np.asarray([event.weight for event in past_events], dtype=float)
+    event_times = np.asarray([event.time for event in past_events], dtype=float)
+    decayed = event_weights * np.exp(-params.beta * np.maximum(query_time - event_times, 0.0))
+    if sparse.issparse(params.alpha):
+        excitation = params.alpha[visible_ids, :][:, event_ids] @ decayed
+    else:
+        excitation = params.alpha[np.ix_(visible_ids, event_ids)] @ decayed
+    intensities += np.asarray(excitation, dtype=float).ravel()
+    return np.maximum(intensities, 1e-12)
 
 
 def reciprocal_rank_for(ranked_ids: list[int], evidence_ids: set[int]) -> float:
