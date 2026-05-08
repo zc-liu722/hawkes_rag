@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
+import time
 
 import numpy as np
 from scipy.optimize import minimize
@@ -29,6 +31,36 @@ def _make_objective_callback(label: str, objective):
         print(f"[{label}] iter={state['iteration']} objective={value:.6f}", flush=True)
 
     return callback
+
+
+def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
+    raw_value = os.environ.get(name, str(default))
+    try:
+        value = int(raw_value)
+    except ValueError:
+        value = default
+    return max(minimum, value)
+
+
+def _adam_log_every() -> int:
+    return _env_int("HAWKES_RAG_ADAM_LOG_EVERY", 1)
+
+
+def _log_adam_progress(
+    label: str,
+    *,
+    iteration: int,
+    max_iter: int,
+    objective: float,
+    best_objective: float,
+    started: float,
+) -> None:
+    elapsed = time.perf_counter() - started
+    print(
+        f"[{label}] iter={iteration}/{max_iter} "
+        f"objective={objective:.6f} best={best_objective:.6f} elapsed={elapsed:.1f}s",
+        flush=True,
+    )
 
 
 class LowRankHawkesEstimator:
@@ -225,12 +257,18 @@ class LowRankHawkesEstimator:
         successes = []
         messages = []
         n_iter = 0
+        total = len(trajectories)
         for index, (events, horizon, active) in enumerate(
             zip(trajectories, horizons, active_memory_ids)
         ):
             active = sorted(set(int(memory_id) for memory_id in active))
             if not active:
                 continue
+            print(
+                f"[local_active_mle] trajectory={index + 1}/{total} "
+                f"events={len(events)} active_memories={len(active)} horizon={horizon:.3f}",
+                flush=True,
+            )
             if len(active) > self.dense_threshold:
                 raise ValueError(
                     "conversation active set is too large for local dense MLE; "
@@ -256,6 +294,11 @@ class LowRankHawkesEstimator:
                 seed=int(self.rng.integers(0, 2**32 - 1)),
             )
             fit = local_estimator.fit([local_events], [horizon], max_iter=max_iter)
+            print(
+                f"[local_active_mle] trajectory={index + 1}/{total} done "
+                f"n_iter={fit.n_iter} objective={fit.objective:.6f}",
+                flush=True,
+            )
             local_alpha = (
                 fit.params.alpha.toarray() if sparse.issparse(fit.params.alpha) else fit.params.alpha
             )
@@ -359,6 +402,8 @@ class LowRankHawkesEstimator:
         best_state: dict[str, torch.Tensor] | None = None
         best_objective = float("inf")
         completed_iters = 0
+        log_every = _adam_log_every()
+        started = time.perf_counter()
         for iteration in range(max_iter):
             adam.zero_grad()
             mu, alpha, beta = _unpack_low_rank_torch(
@@ -392,6 +437,15 @@ class LowRankHawkesEstimator:
                     "diagonal_bias": diagonal_bias.detach().clone(),
                     "raw_beta": raw_beta.detach().clone(),
                 }
+            if completed_iters == 1 or completed_iters == max_iter or completed_iters % log_every == 0:
+                _log_adam_progress(
+                    "low_rank_adam",
+                    iteration=completed_iters,
+                    max_iter=max_iter,
+                    objective=objective_value,
+                    best_objective=best_objective,
+                    started=started,
+                )
         if best_state is not None:
             with torch.no_grad():
                 raw_mu.copy_(best_state["raw_mu"])
@@ -562,8 +616,11 @@ def _fit_full_hawkes_torch(
     adam = torch.optim.Adam(parameters, lr=learning_rate)
     best_state: dict[str, torch.Tensor] | None = None
     best_objective = float("inf")
+    completed_iters = 0
+    log_every = _adam_log_every()
+    started = time.perf_counter()
 
-    for _ in range(max_iter):
+    for iteration in range(max_iter):
         adam.zero_grad()
         mu, alpha, beta = _unpack_full_hawkes_torch(
             torch,
@@ -579,6 +636,7 @@ def _fit_full_hawkes_torch(
             break
         objective.backward()
         adam.step()
+        completed_iters = iteration + 1
         objective_value = float(objective.detach().cpu())
         if objective_value < best_objective:
             best_objective = objective_value
@@ -587,6 +645,15 @@ def _fit_full_hawkes_torch(
                 "raw_alpha": raw_alpha.detach().clone(),
                 "raw_beta": raw_beta.detach().clone(),
             }
+        if completed_iters == 1 or completed_iters == max_iter or completed_iters % log_every == 0:
+            _log_adam_progress(
+                "full_hawkes_adam",
+                iteration=completed_iters,
+                max_iter=max_iter,
+                objective=objective_value,
+                best_objective=best_objective,
+                started=started,
+            )
 
     if best_state is not None:
         with torch.no_grad():
@@ -611,7 +678,7 @@ def _fit_full_hawkes_torch(
         success=bool(np.isfinite(best_objective)),
         objective=float(best_objective),
         message=f"Adam finished on {torch_device}",
-        n_iter=int(max_iter),
+        n_iter=int(completed_iters),
     )
 
 
@@ -679,6 +746,11 @@ def _unpack_low_rank_torch(
     return mu, alpha, beta
 
 
+def _torch_likelihood_chunk_size(n_events: int) -> int:
+    chunk_size = _env_int("HAWKES_RAG_TORCH_CHUNK_SIZE", 1024)
+    return max(1, min(chunk_size, n_events))
+
+
 def _torch_log_likelihood(torch, mu, alpha, beta, trajectory: dict[str, object]):
     times = trajectory["times"]
     memory_ids = trajectory["memory_ids"]
@@ -688,13 +760,20 @@ def _torch_log_likelihood(torch, mu, alpha, beta, trajectory: dict[str, object])
     if times.numel() == 0:
         log_terms = torch.zeros((), dtype=mu.dtype, device=mu.device)
     else:
-        dt = times[:, None] - times[None, :]
-        past = dt > 0.0
-        decay = torch.exp(-beta * torch.clamp(dt, min=0.0)) * past.to(mu.dtype)
-        alpha_for_events = alpha[memory_ids[:, None], memory_ids[None, :]]
-        excitation = torch.sum(alpha_for_events * decay * weights[None, :], dim=1)
-        lam = mu[memory_ids] + excitation
-        log_terms = torch.sum(torch.log(torch.clamp(lam, min=1e-12)))
+        n_events = int(times.numel())
+        chunk_size = _torch_likelihood_chunk_size(n_events)
+        log_terms = torch.zeros((), dtype=mu.dtype, device=mu.device)
+        for start in range(0, n_events, chunk_size):
+            end = min(start + chunk_size, n_events)
+            chunk_times = times[start:end]
+            chunk_ids = memory_ids[start:end]
+            dt = chunk_times[:, None] - times[None, :]
+            past = dt > 0.0
+            decay = torch.exp(-beta * torch.clamp(dt, min=0.0)) * past.to(mu.dtype)
+            alpha_for_events = alpha[chunk_ids[:, None], memory_ids[None, :]]
+            excitation = torch.sum(alpha_for_events * decay * weights[None, :], dim=1)
+            lam = mu[chunk_ids] + excitation
+            log_terms = log_terms + torch.sum(torch.log(torch.clamp(lam, min=1e-12)))
     integral = torch.sum(mu[active]) * horizon
     if times.numel():
         alpha_col_sums = torch.sum(alpha[active, :], dim=0)

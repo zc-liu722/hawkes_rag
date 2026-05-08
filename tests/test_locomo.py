@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from benchmarks.locomo.run_locomo import batch_intensities_at_times
+from hawkes_rag.core import Event, HawkesParams, MultivariateHawkesProcess
 from hawkes_rag.estimation import LowRankHawkesEstimator
 from hawkes_rag.evaluation import heldout_predictive_log_likelihood
 from hawkes_rag.locomo import (
@@ -101,3 +103,36 @@ def test_official_locomo10_loader_pins_sessions(tmp_path) -> None:
     assert corpus.conversations[0].qa_pairs
     assert corpus.conversations[0].qa_pairs[0].question == "What does Alice like?"
     assert corpus.conversations[0].qa_pairs[0].evidence_message_ids == ["d0"]
+
+
+def test_batch_intensities_at_times_matches_process() -> None:
+    params = HawkesParams(
+        mu=np.array([0.1, 0.08, 0.06]),
+        alpha=np.array(
+            [
+                [0.3, 0.05, 0.02],
+                [0.04, 0.25, 0.03],
+                [0.01, 0.06, 0.2],
+            ]
+        ),
+        beta=1.2,
+    )
+    events = [
+        Event(0.2, 0),
+        Event(0.8, 1, 0.5),
+        Event(1.4, 0),
+        Event(1.8, 2),
+    ]
+    query_times = [0.1, 0.9, 2.0]
+    process = MultivariateHawkesProcess(params)
+    expected = np.vstack(
+        [
+            process.intensities(
+                query_time,
+                [event for event in events if event.time < query_time],
+            )
+            for query_time in query_times
+        ]
+    )
+    actual = batch_intensities_at_times(params, events, query_times, device="cpu")
+    assert np.allclose(actual, expected)

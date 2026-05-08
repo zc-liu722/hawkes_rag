@@ -117,7 +117,10 @@ The benchmark path is:
 The local implementation uses sentence-level facts and MiniLM embeddings
 (`sentence-transformers/all-MiniLM-L6-v2`) by default. Install the embeddings
 extra for the default run; deterministic hashing embeddings are available only
-when explicitly selected with `--embedding hashing`. The research version
+when explicitly selected with `--embedding hashing`. LoCoMo benchmark runs
+cache downloaded embedding models in `benchmarks/locomo/cache/models` by
+default; override this with `--model-cache-dir` if you want a shared cache
+elsewhere. The research version
 should replace the sentence splitter with a Mem0-style or LLM fact extractor.
 
 ## Real LoCoMo Run

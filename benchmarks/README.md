@@ -37,6 +37,11 @@ labels for retrieval grading, and MLE with conversation-local fitting composed
 into a sparse global alpha. Use `--embedding hashing --no-fit-mle --max-facts
 80` for a fast smoke run.
 
+MiniLM and BGE model files are cached under `benchmarks/locomo/cache/models`
+by default, so the first run downloads them once and later runs reuse the local
+copy. Use `--model-cache-dir /path/to/models` to place that reusable cache
+somewhere else.
+
 GPU acceleration is available through PyTorch:
 
 ```bash

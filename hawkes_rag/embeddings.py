@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
@@ -34,7 +35,14 @@ class HashingEmbedding:
 class SentenceTransformerEmbedding:
     """Local sentence-transformers embedding wrapper with normalized vectors."""
 
-    def __init__(self, model_name: str, *, device: str | None = None, batch_size: int = 32):
+    def __init__(
+        self,
+        model_name: str,
+        *,
+        device: str | None = None,
+        batch_size: int = 32,
+        cache_dir: str | Path | None = None,
+    ):
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError as exc:
@@ -45,7 +53,14 @@ class SentenceTransformerEmbedding:
         self.model_name = model_name
         self.device = str(resolve_torch_device(device)) if device is not None else None
         self.batch_size = int(batch_size)
-        self.model = SentenceTransformer(model_name, device=self.device)
+        self.cache_dir = Path(cache_dir) if cache_dir is not None else None
+        if self.cache_dir is not None:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.model = SentenceTransformer(
+            model_name,
+            device=self.device,
+            cache_folder=str(self.cache_dir) if self.cache_dir is not None else None,
+        )
 
     def __call__(self, text: str) -> np.ndarray:
         return np.asarray(
@@ -65,6 +80,7 @@ def make_embedding_fn(
     fallback_to_hashing: bool = False,
     device: str | None = None,
     batch_size: int = 32,
+    cache_dir: str | Path | None = None,
 ) -> EmbeddingFn:
     normalized = name.lower()
     if normalized == "hashing":
@@ -76,7 +92,12 @@ def make_embedding_fn(
     if normalized not in model_names:
         raise ValueError(f"unknown embedding backend: {name}")
     try:
-        return SentenceTransformerEmbedding(model_names[normalized], device=device, batch_size=batch_size)
+        return SentenceTransformerEmbedding(
+            model_names[normalized],
+            device=device,
+            batch_size=batch_size,
+            cache_dir=cache_dir,
+        )
     except Exception as exc:
         if not fallback_to_hashing:
             raise

@@ -5,7 +5,12 @@ import pytest
 from scipy import sparse
 
 from hawkes_rag.core import HawkesParams, simulate_ogata
-from hawkes_rag.estimation import LowRankHawkesEstimator, fit_full_hawkes, topk_similarity_prior
+from hawkes_rag.estimation import (
+    LowRankHawkesEstimator,
+    _torch_log_likelihood,
+    fit_full_hawkes,
+    topk_similarity_prior,
+)
 
 
 def test_full_mle_smoke_on_synthetic_events() -> None:
@@ -87,6 +92,33 @@ def test_low_rank_adam_smoke_when_torch_is_available() -> None:
     result = estimator.fit(trajectories, [30.0, 30.0], max_iter=3)
     assert np.isfinite(result.objective)
     assert result.params.alpha.shape == (3, 3)
+
+
+def test_torch_log_likelihood_chunking_matches_full_matrix(monkeypatch) -> None:
+    torch = pytest.importorskip("torch")
+    device = torch.device("cpu")
+    dtype = torch.float64
+    trajectory = {
+        "times": torch.tensor([0.5, 1.2, 1.8, 2.4, 3.1], dtype=dtype, device=device),
+        "memory_ids": torch.tensor([0, 1, 0, 2, 1], dtype=torch.long, device=device),
+        "weights": torch.ones(5, dtype=dtype, device=device),
+        "horizon": torch.tensor(4.0, dtype=dtype, device=device),
+        "active": torch.tensor([True, True, True], dtype=torch.bool, device=device),
+    }
+    mu = torch.tensor([0.08, 0.07, 0.05], dtype=dtype, device=device)
+    alpha = torch.tensor(
+        [[0.20, 0.03, 0.01], [0.04, 0.18, 0.02], [0.01, 0.05, 0.16]],
+        dtype=dtype,
+        device=device,
+    )
+    beta = torch.tensor(1.1, dtype=dtype, device=device)
+
+    monkeypatch.setenv("HAWKES_RAG_TORCH_CHUNK_SIZE", "99")
+    full_value = _torch_log_likelihood(torch, mu, alpha, beta, trajectory)
+    monkeypatch.setenv("HAWKES_RAG_TORCH_CHUNK_SIZE", "2")
+    chunked_value = _torch_log_likelihood(torch, mu, alpha, beta, trajectory)
+
+    assert torch.allclose(chunked_value, full_value)
 
 
 def test_topk_similarity_prior_can_stay_sparse() -> None:

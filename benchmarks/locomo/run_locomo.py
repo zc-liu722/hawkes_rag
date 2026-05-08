@@ -18,6 +18,8 @@ from hawkes_rag.core import Event, HawkesParams, MultivariateHawkesProcess, diag
 from hawkes_rag.embeddings import EmbeddingFn, make_embedding_fn
 from hawkes_rag.estimation import LowRankHawkesEstimator
 from hawkes_rag.evaluation import heldout_predictive_log_likelihood
+from hawkes_rag.gpu import best_float_dtype, resolve_torch_device
+from hawkes_rag.memory import _query_cosine
 from hawkes_rag.locomo import (
     AtomicFact,
     ConversationMessage,
@@ -34,7 +36,6 @@ except ImportError:
     def load_official_locomo10_samples(path: Path):
         return load_official_locomo10_json(path)
 
-from hawkes_rag.utils import cosine_similarity
 from hawkes_rag.estimation import topk_similarity_prior
 
 
@@ -129,6 +130,12 @@ def main() -> None:
         help="Embedding backend for eventization and retrieval queries.",
     )
     parser.add_argument(
+        "--model-cache-dir",
+        type=Path,
+        default=Path("benchmarks/locomo/cache/models"),
+        help="Directory for downloaded sentence-transformers models, reused across runs.",
+    )
+    parser.add_argument(
         "--max-facts",
         type=int,
         default=0,
@@ -155,8 +162,15 @@ def main() -> None:
     args.outputs_dir.mkdir(parents=True, exist_ok=True)
     args.eventized_cache.parent.mkdir(parents=True, exist_ok=True)
 
+    if args.embedding != "hashing":
+        args.model_cache_dir.mkdir(parents=True, exist_ok=True)
+        _log(f"Using embedding model cache: {args.model_cache_dir}")
     _log("Initializing embedding backend")
-    embedding_fn = make_embedding_fn(args.embedding, device=args.device)
+    embedding_fn = make_embedding_fn(
+        args.embedding,
+        device=args.device,
+        cache_dir=args.model_cache_dir if args.embedding != "hashing" else None,
+    )
 
     if args.eventized_cache.exists() and not args.refresh_cache:
         _log(f"Loading eventized cache: {args.eventized_cache}")
@@ -246,14 +260,24 @@ def main() -> None:
     splits = corpus.heldout_splits(args.train_fraction)
     _log(f"Created {len(splits)} heldout splits with train_fraction={args.train_fraction}")
     _log("Evaluating heldout PLL for full_alpha")
-    full_pll = heldout_predictive_log_likelihood(full_params, splits)
+    full_pll = heldout_predictive_log_likelihood(
+        full_params,
+        splits,
+        device=args.device,
+        label="full_alpha_pll",
+    )
     _log(
         f"full_alpha heldout PLL/event={full_pll.per_event:.6f} "
         f"events={full_pll.n_events}"
     )
     _log("Evaluating heldout PLL for diagonal_alpha")
     diagonal_params = diagonal_only(full_params)
-    diagonal_pll = heldout_predictive_log_likelihood(diagonal_params, splits)
+    diagonal_pll = heldout_predictive_log_likelihood(
+        diagonal_params,
+        splits,
+        device=args.device,
+        label="diagonal_alpha_pll",
+    )
     _log(
         f"diagonal_alpha heldout PLL/event={diagonal_pll.per_event:.6f} "
         f"events={diagonal_pll.n_events}"
@@ -267,6 +291,8 @@ def main() -> None:
     naive_pll = heldout_predictive_log_likelihood(
         naive_params,
         splits,
+        device=args.device,
+        label="naive_zero_alpha_pll",
     )
     _log(
         f"naive_zero_alpha heldout PLL/event={naive_pll.per_event:.6f} "
@@ -283,6 +309,7 @@ def main() -> None:
         },
         train_fraction=args.train_fraction,
         probe_delay_days=args.qa_probe_delay_days,
+        device=args.device,
     )
     _log("Running paired bootstrap delta CI")
     bootstrap = paired_bootstrap_delta_ci(
@@ -291,6 +318,7 @@ def main() -> None:
         splits,
         samples=args.bootstrap_samples,
         seed=0,
+        device=args.device,
     )
 
     result = {
@@ -356,44 +384,64 @@ def retrieval_metrics(
     *,
     train_fraction: float,
     probe_delay_days: float,
+    device: str | None,
     top_ks: tuple[int, ...] = (1, 5),
 ) -> list[dict[str, Any]]:
     rows = []
     for model, params in params_by_model.items():
+        model_started = time.perf_counter()
+        _log(f"Retrieval model={model} started")
         hits = {k: 0 for k in top_ks}
         reciprocal_ranks = []
         n_queries = 0
-        process = MultivariateHawkesProcess(params)
-        for conversation in corpus.conversations:
+        for conversation_index, conversation in enumerate(corpus.conversations, start=1):
+            conversation_started = time.perf_counter()
             qa_pairs = _conversation_qa_pairs(conversation)
             if not qa_pairs:
                 continue
+            facts = sorted(conversation.facts, key=lambda fact: fact.id)
+            fact_ids = np.asarray([fact.id for fact in facts], dtype=int)
+            fact_times = np.asarray([fact.source_time for fact in facts], dtype=float)
+            fact_embeddings = np.vstack([fact.embedding for fact in facts]) if facts else np.empty((0, 0))
             facts_by_message_id: dict[str, list[AtomicFact]] = {}
-            for fact in conversation.facts:
+            for fact in facts:
                 facts_by_message_id.setdefault(fact.source_message_id, []).append(fact)
+            query_payloads = []
             for qa_pair in qa_pairs:
                 evidence_facts = [
                     fact
                     for evidence_id in _qa_evidence_message_ids(qa_pair)
                     for fact in facts_by_message_id.get(evidence_id, [])
                 ]
-                if not evidence_facts:
-                    continue
-                query_time = max(fact.source_time for fact in evidence_facts) + probe_delay_days
+                if evidence_facts:
+                    query_payloads.append(
+                        (
+                            qa_pair,
+                            evidence_facts,
+                            max(fact.source_time for fact in evidence_facts) + probe_delay_days,
+                        )
+                    )
+            query_times = [query_time for _, _, query_time in query_payloads]
+            batch_intensities = batch_intensities_at_times(
+                params,
+                conversation.events,
+                query_times,
+                device=device,
+            )
+            conversation_queries = 0
+            for query_index, (qa_pair, evidence_facts, query_time) in enumerate(query_payloads):
                 query = embedding_fn(_qa_question(qa_pair))
-                history = [event for event in conversation.events if event.time < query_time]
-                intensities = process.intensities(query_time, history)
-                scored = []
-                for fact in conversation.facts:
-                    if fact.source_time > query_time:
-                        continue
-                    sim = cosine_similarity(query, fact.embedding)
-                    scored.append((float(sim * intensities[fact.id]), fact.id))
-                if not scored:
+                intensities = batch_intensities[query_index]
+                visible = fact_times <= query_time
+                if not np.any(visible):
                     continue
-                ranked_ids = [fact_id for _, fact_id in sorted(scored, reverse=True)]
+                sims = _query_cosine(query, fact_embeddings[visible], device=device)
+                scores = sims * intensities[fact_ids[visible]]
+                order = np.argsort(-scores)
+                ranked_ids = [int(fact_id) for fact_id in fact_ids[visible][order]]
                 ground_truth_ids = {fact.id for fact in evidence_facts}
                 n_queries += 1
+                conversation_queries += 1
                 for k in top_ks:
                     if ground_truth_ids.intersection(ranked_ids[:k]):
                         hits[k] += 1
@@ -404,6 +452,11 @@ def retrieval_metrics(
                 ]
                 rank = min(ranks) if ranks else 0
                 reciprocal_ranks.append(0.0 if rank == 0 else 1.0 / rank)
+            _log(
+                f"Retrieval model={model} conversation={conversation_index}/{len(corpus.conversations)} "
+                f"queries={conversation_queries} cumulative_queries={n_queries} "
+                f"elapsed={time.perf_counter() - conversation_started:.1f}s"
+            )
         rows.append(
             {
                 "model": model,
@@ -413,7 +466,75 @@ def retrieval_metrics(
                 "mrr": float(np.mean(reciprocal_ranks)) if reciprocal_ranks else 0.0,
             }
         )
+        _log(f"Retrieval model={model} done queries={n_queries} elapsed={time.perf_counter() - model_started:.1f}s")
     return rows
+
+
+def batch_intensities_at_times(
+    params: HawkesParams,
+    events: list[Event],
+    query_times: list[float],
+    *,
+    device: str | None,
+) -> np.ndarray:
+    if not query_times:
+        return np.empty((0, params.n_memories), dtype=float)
+    if device is not None and device.lower() != "cpu":
+        try:
+            import torch
+        except ImportError:
+            pass
+        else:
+            torch_device = resolve_torch_device(device)
+            dtype = best_float_dtype(torch, torch_device)
+            query_times_t = torch.as_tensor(query_times, dtype=dtype, device=torch_device)
+            if events:
+                event_times = torch.as_tensor([event.time for event in events], dtype=dtype, device=torch_device)
+                event_ids = torch.as_tensor(
+                    [event.memory_id for event in events],
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                event_weights = torch.as_tensor(
+                    [event.weight for event in events],
+                    dtype=dtype,
+                    device=torch_device,
+                )
+                dt = query_times_t[:, None] - event_times[None, :]
+                past = dt > 0.0
+                decayed = torch.exp(-torch.as_tensor(params.beta, dtype=dtype, device=torch_device) * torch.clamp(dt, min=0.0))
+                decayed = decayed * past.to(dtype) * event_weights[None, :]
+                excitation_by_memory = torch.zeros(
+                    (len(query_times), params.n_memories),
+                    dtype=dtype,
+                    device=torch_device,
+                )
+                excitation_by_memory.scatter_add_(
+                    1,
+                    event_ids[None, :].expand(len(query_times), -1),
+                    decayed,
+                )
+            else:
+                excitation_by_memory = torch.zeros(
+                    (len(query_times), params.n_memories),
+                    dtype=dtype,
+                    device=torch_device,
+                )
+            alpha_np = params.alpha.toarray() if sparse.issparse(params.alpha) else params.alpha
+            alpha_t = torch.as_tensor(alpha_np, dtype=dtype, device=torch_device)
+            mu_t = torch.as_tensor(params.mu, dtype=dtype, device=torch_device)
+            intensities = mu_t[None, :] + excitation_by_memory @ alpha_t.T
+            return torch.clamp(intensities, min=1e-12).detach().cpu().numpy().astype(float)
+    process = MultivariateHawkesProcess(params)
+    return np.vstack(
+        [
+            process.intensities(
+                query_time,
+                [event for event in events if event.time < query_time],
+            )
+            for query_time in query_times
+        ]
+    )
 
 
 def paired_bootstrap_delta_ci(
@@ -423,21 +544,26 @@ def paired_bootstrap_delta_ci(
     *,
     samples: int,
     seed: int,
+    device: str | None,
 ) -> dict[str, Any]:
     deltas = []
-    for split in splits:
-        left_value = trajectory_conditional_pll(left, split)
-        right_value = trajectory_conditional_pll(right, split)
+    started = time.perf_counter()
+    for index, split in enumerate(splits, start=1):
+        left_value = trajectory_conditional_pll(left, split, device=device)
+        right_value = trajectory_conditional_pll(right, split, device=device)
         denom = max(len(split.test_events), 1)
         deltas.append((left_value - right_value) / denom)
+        _log(
+            f"Bootstrap PLL split={index}/{len(splits)} events={len(split.test_events)} "
+            f"delta_per_event={deltas[-1]:.6f} elapsed={time.perf_counter() - started:.1f}s"
+        )
     values = np.asarray(deltas, dtype=float)
     rng = np.random.default_rng(seed)
-    boot = []
-    if values.size:
-        for _ in range(samples):
-            indices = rng.integers(0, values.size, size=values.size)
-            boot.append(float(np.mean(values[indices])))
-    boot_values = np.asarray(boot, dtype=float)
+    if values.size and samples > 0:
+        indices = rng.integers(0, values.size, size=(samples, values.size))
+        boot_values = np.mean(values[indices], axis=1)
+    else:
+        boot_values = np.asarray([], dtype=float)
     return {
         "comparison": "full_alpha_minus_diagonal_alpha",
         "unit": "nats_per_heldout_event",
@@ -450,15 +576,14 @@ def paired_bootstrap_delta_ci(
     }
 
 
-def trajectory_conditional_pll(params: HawkesParams, split) -> float:
-    process = MultivariateHawkesProcess(params)
-    return process.conditional_log_likelihood(
-        split.test_events,
-        start=split.train_horizon,
-        end=split.full_horizon,
-        initial_history=split.train_events,
-        active_memory_ids=split.active_memory_ids,
+def trajectory_conditional_pll(params: HawkesParams, split, *, device: str | None) -> float:
+    pll = heldout_predictive_log_likelihood(
+        params,
+        [split],
+        device=device,
+        label="bootstrap_pll",
     )
+    return pll.total
 
 
 def format_markdown(result: dict[str, Any]) -> str:
