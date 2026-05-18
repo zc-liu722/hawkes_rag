@@ -23,7 +23,7 @@ import time
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 import numpy as np
 
@@ -35,6 +35,7 @@ if str(benchmarks_dir) not in sys.path:
     sys.path.insert(0, str(benchmarks_dir))
 
 from hawkes_agent import AgentHarnessConfig, DynamicsConfig, InMemoryVectorStore, ModelRoutingConfig, RecallMiddleware
+from hawkes_agent.memory import RetrievedSegment
 from hawkes_rag.embeddings import make_embedding_fn
 from longmemeval.run_originidea_sessions import (
     Session,
@@ -48,7 +49,6 @@ from longmemeval.run_originidea_turns import (
     is_single_session,
     normalize_rows,
     parse_date,
-    session_recall_at_k,
 )
 
 if TYPE_CHECKING:
@@ -57,10 +57,26 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class HarnessResult:
+    """Per-method harness outcome.
+
+    Session-level recall / hit / MRR / SRR live in ``session_metrics`` (e.g. ``k10``),
+    computed from the ranked session-index stream — not from deduped top-``final_top_k``
+    session ids.
+
+    ``replay_events`` counters include:
+      adopted — cumulative adopted **memory segment ids** (``sum(len(adopted_ids))``
+      over replay steps), not replay turn count.
+      contradicted — segment ids passed to ``suppress()`` after contradiction micro;
+      each corresponds to one suppress_lambda update.
+      cold_triggered — count of retrievals where ``recall_hot_cold_reranked`` decided
+      the hot path was unreliable and merged in the cold/hybrid candidate path (0/1
+      per such call); ``full_agent_memory`` also adds the final benchmark question call.
+      llm_calls — contradiction micro (and any other graphed LLM nodes that bump it).
+    """
+
     retrieved_session_indices: list[int]
     retrieved_session_ids: list[str]
     full_order_indices: list[int]
-    session_recall_at_k: float
     session_metrics: dict[str, dict[str, float]]
     replay_events: dict[str, int]
     event_trace: list[dict[str, Any]] = field(default_factory=list)
@@ -239,7 +255,6 @@ def compute_result(
     *,
     rank: list[int],
     sessions: list[Session],
-    evidence_ids: set[str],
     final_top_k: int,
     replay_events: dict[str, int],
     event_trace: list[dict[str, Any]] | None = None,
@@ -254,7 +269,6 @@ def compute_result(
         retrieved_session_indices=top_indices,
         retrieved_session_ids=top_ids,
         full_order_indices=rank,
-        session_recall_at_k=session_recall_at_k(top_ids, evidence_ids),
         session_metrics=metrics,
         replay_events=dict(replay_events),
         event_trace=list(event_trace or []),
@@ -275,6 +289,10 @@ def run_lambda_harness(
     adopt: bool,
     llm: "LiteLLMRouter | None" = None,
     trace_events: bool = False,
+    process_log: Callable[[dict[str, Any]], None] | None = None,
+    question_id: str = "",
+    question_index: int = 0,
+    method_label: str = "lambda",
 ) -> HarnessResult:
     middleware = make_recall_middleware(
         embed_fn=embed_fn,
@@ -292,7 +310,7 @@ def run_lambda_harness(
     }
     event_trace: list[dict[str, Any]] = []
     for replay_turn in replay_turns:
-        segments, _mu = middleware.recall(
+        segments, recall_mu = middleware.recall(
             replay_turn.query_text,
             now=replay_turn.time,
             namespace=namespace,
@@ -301,9 +319,12 @@ def run_lambda_harness(
             threshold=-1.0,
         )
         replay_events["retrieved"] += len(segments)
+        adoption_analysis: dict[str, Any] | None = None
+        prescreen_signal = 0.0
         if adopt and segments:
             adopted, _scores = middleware.score_adoption(replay_turn.memory_text, segments)
             signal, suspicious = middleware.prescreen_contradiction_signal(segments, adopted, _scores)
+            prescreen_signal = float(signal)
             contradicted: list[str] = []
             if llm is not None and signal > 0.0 and suspicious:
                 result = llm.classify_contradictions(
@@ -341,6 +362,8 @@ def run_lambda_harness(
                     }
                     for s in segments
                 ],
+                "recall_mu": float(recall_mu),
+                "prescreen_signal": prescreen_signal,
                 "adopted_ids": adopted,
                 "not_adopted_ids": [sid for sid in retrieved_ids if sid not in set(adopted)],
                 "adoption_scores": {sid: round(float(score), 6) for sid, score in _scores.items()},
@@ -353,6 +376,15 @@ def run_lambda_harness(
                 },
             }
             event_trace.append(trace)
+            adoption_analysis = _adoption_threshold_rows(
+                segments,
+                _scores,
+                adopted,
+                [s.id for s in suspicious],
+                dynamics,
+                prescreen_signal=prescreen_signal,
+            )
+            adoption_analysis["contradicted_ids"] = contradicted
             if trace_events:
                 print(
                     "    [trace:lambda] "
@@ -377,6 +409,53 @@ def run_lambda_harness(
         )
         replay_events["written"] += 1
 
+        if process_log is not None:
+            seg_head = [
+                {
+                    "id": s.id,
+                    "pool": s.retrieval_pool,
+                    "cos_at_recall": round(float(s.cos_at_recall), 6),
+                    "hawkes_score": round(float(s.hawkes_score), 6),
+                    "rerank_score": round(float(s.rerank_score), 6),
+                    "lambda_minus": round(float(s.lambda_minus_snapshot), 6),
+                }
+                for s in segments[:_PROCESS_LOG_MAX_SEGMENTS]
+            ]
+            payload: dict[str, Any] = {
+                "kind": "replay_turn",
+                "wall_time": time.time(),
+                "question_id": question_id,
+                "question_index": question_index,
+                "method": method_label,
+                "namespace": namespace,
+                "benchmark_question": question,
+                "dynamics_thresholds": _dynamics_threshold_dict(dynamics),
+                "turn": {
+                    "turn_id": f"session:{replay_turn.sorted_pos}:turn:{replay_turn.turn_index}",
+                    "session_id": replay_turn.session_id,
+                    "session_index": replay_turn.session_index,
+                    "sorted_pos": replay_turn.sorted_pos,
+                    "turn_index": replay_turn.turn_index,
+                    "replay_time": replay_turn.time,
+                    "is_evidence_turn": replay_turn.is_evidence,
+                },
+                "recall": {
+                    "mu": float(recall_mu),
+                    "n_segments": len(segments),
+                    "intermediate_top_k": dynamics.intermediate_top_k,
+                    "use_lambda": True,
+                    "recall_score_cutoff": -1.0,
+                },
+                "recall_segments_head": seg_head,
+                "adoption_path_enabled": adopt,
+                "adoption_analysis": adoption_analysis,
+            }
+            if not adopt:
+                payload["adoption_skipped_reason"] = "lambda_no_adoption_harness_mode"
+            elif not segments:
+                payload["adoption_skipped_reason"] = "no_retrieved_segments"
+            process_log(payload)
+
     rank = final_rank_from_segments(
         middleware,
         question=question,
@@ -384,10 +463,25 @@ def run_lambda_harness(
         namespace=namespace,
         use_lambda=True,
     )
+    if process_log is not None:
+        process_log(
+            {
+                "kind": "final_benchmark_recall",
+                "wall_time": time.time(),
+                "question_id": question_id,
+                "question_index": question_index,
+                "method": method_label,
+                "namespace": namespace,
+                "benchmark_question": question,
+                "dynamics_thresholds": _dynamics_threshold_dict(dynamics),
+                "recall_mode": "lambda_scored_final_pool",
+                "ranked_session_positions_head": rank[: min(48, len(rank))],
+                "final_top_k": dynamics.final_top_k,
+            }
+        )
     return compute_result(
         rank=rank,
         sessions=sessions,
-        evidence_ids=evidence_ids,
         final_top_k=dynamics.final_top_k,
         replay_events=replay_events,
         event_trace=event_trace,
@@ -404,6 +498,9 @@ def run_cosine_baseline(
     embed_fn,
     dynamics: DynamicsConfig,
     namespace: str,
+    process_log: Callable[[dict[str, Any]], None] | None = None,
+    question_id: str = "",
+    question_index: int = 0,
 ) -> HarnessResult:
     middleware = make_recall_middleware(
         embed_fn=embed_fn,
@@ -426,6 +523,30 @@ def run_cosine_baseline(
                 "query_text": replay_turn.query_text,
             },
         )
+        if process_log is not None:
+            process_log(
+                {
+                    "kind": "replay_turn",
+                    "wall_time": time.time(),
+                    "question_id": question_id,
+                    "question_index": question_index,
+                    "method": "cosine",
+                    "namespace": namespace,
+                    "benchmark_question": question,
+                    "dynamics_thresholds": _dynamics_threshold_dict(dynamics),
+                    "turn": {
+                        "turn_id": f"session:{replay_turn.sorted_pos}:turn:{replay_turn.turn_index}",
+                        "session_id": replay_turn.session_id,
+                        "session_index": replay_turn.session_index,
+                        "sorted_pos": replay_turn.sorted_pos,
+                        "turn_index": replay_turn.turn_index,
+                        "replay_time": replay_turn.time,
+                        "is_evidence_turn": replay_turn.is_evidence,
+                    },
+                    "note": "cosine baseline: no per-turn retrieval; write-only replay",
+                    "adoption_path_enabled": False,
+                }
+            )
     rank = final_rank_from_segments(
         middleware,
         question=question,
@@ -433,10 +554,25 @@ def run_cosine_baseline(
         namespace=namespace,
         use_lambda=False,
     )
+    if process_log is not None:
+        process_log(
+            {
+                "kind": "final_benchmark_recall",
+                "wall_time": time.time(),
+                "question_id": question_id,
+                "question_index": question_index,
+                "method": "cosine",
+                "namespace": namespace,
+                "benchmark_question": question,
+                "dynamics_thresholds": _dynamics_threshold_dict(dynamics),
+                "recall_mode": "cosine_only_final_pool",
+                "ranked_session_positions_head": rank[: min(48, len(rank))],
+                "final_top_k": dynamics.final_top_k,
+            }
+        )
     return compute_result(
         rank=rank,
         sessions=sessions,
-        evidence_ids=evidence_ids,
         final_top_k=dynamics.final_top_k,
         replay_events={
             "retrieved": 0,
@@ -490,6 +626,9 @@ def run_full_agent_memory_harness(
     reranker_backend: str,
     reranker_model: str | None,
     trace_events: bool = False,
+    process_log: Callable[[dict[str, Any]], None] | None = None,
+    question_id: str = "",
+    question_index: int = 0,
 ) -> HarnessResult:
     try:
         from hawkes_agent.graph import build_memory_replay_graph
@@ -550,6 +689,10 @@ def run_full_agent_memory_harness(
             str(k): round(float(v), 6)
             for k, v in (state.get("adoption_scores") or {}).items()
         }
+        adoption_scores_raw = {str(k): float(v) for k, v in (state.get("adoption_scores") or {}).items()}
+        prescreen_signal = float(state.get("prescreen_signal", 0.0) or 0.0)
+        retrieval_counts_raw = state.get("retrieval_counts") or {}
+        hot_cold_analysis = _hot_cold_threshold_analysis(dynamics, retrieval_counts_raw)
         trace = {
             "turn_id": f"session:{replay_turn.sorted_pos}:turn:{replay_turn.turn_index}",
             "session_id": replay_turn.session_id,
@@ -569,16 +712,17 @@ def run_full_agent_memory_harness(
             "adopted_ids": adopted,
             "not_adopted_ids": [sid for sid in retrieved_ids if sid not in adopted_set],
             "adoption_scores": adoption_scores,
+            "prescreen_signal": prescreen_signal,
             "suspicious_ids": [str(c.get("id")) for c in state.get("contradiction_candidates", [])],
             "contradicted_ids": [str(v) for v in state.get("contradicted_ids", [])],
-            "cold_triggered": int((state.get("retrieval_counts") or {}).get("cold_triggered", 0) or 0),
+            "cold_triggered": int((retrieval_counts_raw).get("cold_triggered", 0) or 0),
             "cold_trigger_reason": state.get("cold_trigger_reason"),
-            "retrieval_counts": state.get("retrieval_counts") or {},
+            "retrieval_counts": retrieval_counts_raw,
+            "hot_cold_threshold_analysis": hot_cold_analysis,
             "thresholds": {
                 "hot_lambda_threshold": dynamics.hot_lambda_threshold,
                 "tau_h": dynamics.tau_h,
                 "tau_r": dynamics.tau_r,
-                "hot_margin_threshold": dynamics.hot_margin_threshold,
                 "hot_entropy_threshold": dynamics.hot_entropy_threshold,
                 "min_hot_injected": dynamics.min_hot_injected,
                 "theta_a": dynamics.theta_a,
@@ -587,6 +731,43 @@ def run_full_agent_memory_harness(
             },
         }
         event_trace.append(trace)
+        if process_log is not None:
+            adoption_breakdown = _adoption_threshold_rows_from_dicts(
+                retrieved,
+                adoption_scores_raw,
+                adopted,
+                [str(c.get("id")) for c in state.get("contradiction_candidates", [])],
+                dynamics,
+                prescreen_signal=prescreen_signal,
+            )
+            adoption_breakdown["contradicted_ids"] = [str(v) for v in state.get("contradicted_ids", [])]
+            process_log(
+                {
+                    "kind": "replay_turn",
+                    "wall_time": time.time(),
+                    "question_id": question_id,
+                    "question_index": question_index,
+                    "method": "full_agent_memory",
+                    "namespace": namespace,
+                    "benchmark_question": question,
+                    "dynamics_thresholds": _dynamics_threshold_dict(dynamics),
+                    "turn": {
+                        "turn_id": trace["turn_id"],
+                        "session_id": replay_turn.session_id,
+                        "session_index": replay_turn.session_index,
+                        "sorted_pos": replay_turn.sorted_pos,
+                        "turn_index": replay_turn.turn_index,
+                        "replay_time": replay_turn.time,
+                        "is_evidence_turn": replay_turn.is_evidence,
+                    },
+                    "hot_cold_threshold_analysis": hot_cold_analysis,
+                    "retrieval_counts_raw": dict(retrieval_counts_raw),
+                    "graph_state_hot_top1_rerank": float(state.get("hot_top1_score", 0.0) or 0.0),
+                    "graph_state_hot_margin": float(state.get("hot_margin", 0.0) or 0.0),
+                    "graph_state_hot_entropy": float(state.get("hot_score_entropy", 0.0) or 0.0),
+                    "adoption_analysis": adoption_breakdown,
+                }
+            )
         if trace_events:
             print(
                 "    [trace:full] "
@@ -611,10 +792,28 @@ def run_full_agent_memory_harness(
     replay_events["final_cold_candidates"] = final_counts.get("cold", 0)
     replay_events["final_hot_budget"] = final_counts.get("hot_budget", 0)
     replay_events["final_cold_budget"] = final_counts.get("cold_budget", 0)
+    if process_log is not None:
+        process_log(
+            {
+                "kind": "final_benchmark_recall",
+                "wall_time": time.time(),
+                "question_id": question_id,
+                "question_index": question_index,
+                "method": "full_agent_memory",
+                "namespace": namespace,
+                "benchmark_question": question,
+                "question_time": question_time,
+                "dynamics_thresholds": _dynamics_threshold_dict(dynamics),
+                "recall_mode": "hot_cold_reranked_final_pool",
+                "hot_cold_threshold_analysis": _hot_cold_threshold_analysis(dynamics, final_counts),
+                "retrieval_counts_raw": dict(final_counts),
+                "ranked_session_positions_head": rank[: min(48, len(rank))],
+                "final_top_k": dynamics.final_top_k,
+            }
+        )
     return compute_result(
         rank=rank,
         sessions=sessions,
-        evidence_ids=evidence_ids,
         final_top_k=dynamics.final_top_k,
         replay_events=replay_events,
         event_trace=event_trace,
@@ -638,8 +837,8 @@ def aggregate_by_type(per_question: list[dict[str, Any]], methods: list[str]) ->
             "n_questions": len(rows),
             "methods": {
                 method: {
-                    "session_recall_at_k": float(
-                        np.mean([r[method]["session_recall_at_k"] for r in rows])
+                    "k10_recall": float(
+                        np.mean([r[method]["session_metrics"]["k10"]["recall"] for r in rows])
                     ),
                     "k10_mrr": float(
                         np.mean([r[method]["session_metrics"]["k10"]["mrr"] for r in rows])
@@ -660,6 +859,179 @@ def half_life_days(beta: float) -> float:
 
 def progress(message: str) -> None:
     print(message, flush=True)
+
+
+_PROCESS_LOG_MAX_SEGMENTS = 48
+
+
+def _dynamics_threshold_dict(dynamics: DynamicsConfig) -> dict[str, Any]:
+    return {
+        "hot_lambda_threshold": dynamics.hot_lambda_threshold,
+        "tau": dynamics.tau,
+        "tau_h": dynamics.tau_h,
+        "tau_r": dynamics.tau_r,
+        "hot_entropy_threshold": dynamics.hot_entropy_threshold,
+        "min_hot_injected": dynamics.min_hot_injected,
+        "theta_a": dynamics.theta_a,
+        "theta_c": dynamics.theta_c,
+        "contradiction_top_k": dynamics.contradiction_top_k,
+        "cosine_floor": dynamics.cosine_floor,
+        "mu_base": dynamics.mu_base,
+        "intermediate_top_k": dynamics.intermediate_top_k,
+        "final_top_k": dynamics.final_top_k,
+        "hot_top_k": dynamics.hot_top_k,
+        "cold_top_k": dynamics.cold_top_k,
+        "rerank_top_k": dynamics.rerank_top_k,
+    }
+
+
+def _hot_cold_threshold_analysis(dynamics: DynamicsConfig, counts: dict[str, Any]) -> dict[str, Any]:
+    tau_r = float(dynamics.tau_r)
+    tau_h = float(dynamics.tau_h)
+    top1_r = float(counts.get("hot_top1_score", 0.0) or 0.0)
+    top1_h = float(counts.get("hot_top1_hawkes", 0.0) or 0.0)
+    margin = float(counts.get("hot_margin", 0.0) or 0.0)
+    ent = float(counts.get("hot_score_entropy", 0.0) or 0.0)
+    pool = int(counts.get("hot_rerank_pool_size", counts.get("hot", 0)) or 0)
+    n_ge = int(counts.get("hot_rerank_ge_cutoff_count", 0) or 0)
+    min_hot = int(dynamics.min_hot_injected)
+    low_conf = (top1_r < tau_r) or (top1_h < tau_h)
+    flat = pool >= 2 and ent >= float(dynamics.hot_entropy_threshold)
+    insuf = n_ge < min_hot
+    return {
+        "thresholds": {
+            "tau_r": tau_r,
+            "tau_h": tau_h,
+            "hot_entropy_threshold": float(dynamics.hot_entropy_threshold),
+            "min_hot_injected": min_hot,
+            "hot_lambda_threshold": float(dynamics.hot_lambda_threshold),
+        },
+        "observed": {
+            "hot_top1_rerank": top1_r,
+            "hot_top1_hawkes": top1_h,
+            "hot_margin": margin,
+            "hot_score_entropy_norm": ent,
+            "hot_rerank_pool_size": pool,
+            "hot_rerank_ge_tau_r_count": n_ge,
+        },
+        "comparisons": {
+            "low_confidence": low_conf,
+            "flat_hot_distribution": flat,
+            "insufficient_hot_coverage": insuf,
+        },
+        "cold_triggered": int(counts.get("cold_triggered", 0) or 0),
+        "cold_trigger_reason": counts.get("cold_trigger_reason"),
+    }
+
+
+def _adoption_threshold_rows(
+    segments: list[RetrievedSegment],
+    scores: dict[str, float],
+    adopted: list[str],
+    suspicious_ids: list[str],
+    dynamics: DynamicsConfig,
+    *,
+    prescreen_signal: float,
+) -> dict[str, Any]:
+    adopted_set = set(adopted)
+    suspicious_set = set(suspicious_ids)
+    rows: list[dict[str, Any]] = []
+    for s in segments:
+        aid = s.id
+        sc = float(scores.get(aid, 0.0))
+        cos = float(s.cos_at_recall)
+        rows.append(
+            {
+                "id": aid,
+                "pool": s.retrieval_pool,
+                "cos_at_recall": round(cos, 6),
+                "hawkes_score": round(float(s.hawkes_score), 6),
+                "rerank_score": round(float(s.rerank_score), 6),
+                "lambda_minus": round(float(s.lambda_minus_snapshot), 6),
+                "adoption_score": round(sc, 6),
+                "adopted": aid in adopted_set,
+                "adoption_ge_theta_a": sc >= float(dynamics.theta_a),
+                "contradiction_prescreen_rule": cos >= float(dynamics.theta_c) and sc < float(dynamics.theta_a),
+                "contradiction_prescreen_candidate": aid in suspicious_set,
+            }
+        )
+    cap = _PROCESS_LOG_MAX_SEGMENTS
+    return {
+        "theta_a": float(dynamics.theta_a),
+        "theta_c": float(dynamics.theta_c),
+        "contradiction_top_k": int(dynamics.contradiction_top_k),
+        "prescreen_signal": float(prescreen_signal),
+        "prescreen_invokes_micro": float(prescreen_signal) > 0.0,
+        "segments_logged": min(len(rows), cap),
+        "segments_total": len(rows),
+        "segments": rows[:cap],
+    }
+
+
+def _adoption_threshold_rows_from_dicts(
+    retrieved: list[dict[str, Any]],
+    scores: dict[str, float],
+    adopted: list[str],
+    suspicious_ids: list[str],
+    dynamics: DynamicsConfig,
+    *,
+    prescreen_signal: float,
+) -> dict[str, Any]:
+    adopted_set = set(adopted)
+    suspicious_set = {str(x) for x in suspicious_ids}
+    rows: list[dict[str, Any]] = []
+    for raw in retrieved:
+        aid = str(raw.get("id", ""))
+        sc = float(scores.get(aid, 0.0) or 0.0)
+        cos = float(raw.get("cos_at_recall", 0.0) or 0.0)
+        rows.append(
+            {
+                "id": aid,
+                "pool": raw.get("retrieval_pool"),
+                "cos_at_recall": round(cos, 6),
+                "hawkes_score": round(float(raw.get("hawkes_score", 0.0) or 0.0), 6),
+                "rerank_score": round(float(raw.get("rerank_score", raw.get("score", 0.0)) or 0.0), 6),
+                "lambda_minus": round(float(raw.get("lambda_minus_snapshot", 0.0) or 0.0), 6),
+                "adoption_score": round(sc, 6),
+                "adopted": aid in adopted_set,
+                "adoption_ge_theta_a": sc >= float(dynamics.theta_a),
+                "contradiction_prescreen_rule": cos >= float(dynamics.theta_c) and sc < float(dynamics.theta_a),
+                "contradiction_prescreen_candidate": aid in suspicious_set,
+            }
+        )
+    cap = _PROCESS_LOG_MAX_SEGMENTS
+    return {
+        "theta_a": float(dynamics.theta_a),
+        "theta_c": float(dynamics.theta_c),
+        "contradiction_top_k": int(dynamics.contradiction_top_k),
+        "prescreen_signal": float(prescreen_signal),
+        "prescreen_invokes_micro": float(prescreen_signal) > 0.0,
+        "segments_logged": min(len(rows), cap),
+        "segments_total": len(rows),
+        "segments": rows[:cap],
+    }
+
+
+class ProcessLogWriter:
+    """Streaming JSONL process log; each line is one JSON object."""
+
+    def __init__(self, path: Path | None) -> None:
+        self.path = path
+        self._fp: Any = None
+
+    def emit(self, obj: dict[str, Any]) -> None:
+        if self.path is None:
+            return
+        if self._fp is None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self._fp = self.path.open("w", encoding="utf-8")
+        self._fp.write(json.dumps(obj, ensure_ascii=False) + "\n")
+        self._fp.flush()
+
+    def close(self) -> None:
+        if self._fp is not None:
+            self._fp.close()
+            self._fp = None
 
 
 def embed_texts_with_progress(embed_fn, texts: list[str], *, batch_size: int, label: str) -> np.ndarray:
@@ -734,8 +1106,7 @@ def main() -> None:
     parser.add_argument("--tau-r", type=float, default=0.10)
     parser.add_argument("--alpha", type=float, default=0.5)
     parser.add_argument("--theta-flat", type=float, default=0.85)
-    parser.add_argument("--hot-margin-threshold", type=float, default=0.05)
-    parser.add_argument("--hot-entropy-threshold", type=float, default=0.90)
+    parser.add_argument("--hot-entropy-threshold", type=float, default=0.95)
     parser.add_argument("--intermediate-top-k", type=int, default=20)
     parser.add_argument("--final-top-k", type=int, default=10)
     parser.add_argument("--hot-top-k", type=int, default=3)
@@ -783,6 +1154,13 @@ def main() -> None:
     parser.add_argument("--embed-batch-size", type=int, default=64)
     parser.add_argument("--trace-events", dest="trace_events", action="store_true", default=True)
     parser.add_argument("--no-trace-events", dest="trace_events", action="store_false")
+    parser.add_argument(
+        "--process-log-jsonl",
+        type=Path,
+        default=None,
+        help="Streaming JSONL path (one JSON object per line). Records each replay turn with "
+        "question_id, method, and threshold parameters vs observed values for tuning.",
+    )
     args = parser.parse_args()
     if args.hot_candidate_k > 0 or args.cold_candidate_k > 0:
         progress(
@@ -810,7 +1188,6 @@ def main() -> None:
         tau_r=args.tau_r,
         alpha=args.alpha,
         theta_flat=args.theta_flat,
-        hot_margin_threshold=args.hot_margin_threshold,
         hot_entropy_threshold=args.hot_entropy_threshold,
         intermediate_top_k=args.intermediate_top_k,
         final_top_k=args.final_top_k,
@@ -851,7 +1228,7 @@ def main() -> None:
     progress(
         "[agent-harness] thresholds "
         f"hot_lambda>={args.hot_lambda_threshold} tau_h={args.tau_h} tau_r={args.tau_r} "
-        f"hot_margin<{args.hot_margin_threshold} hot_entropy>={args.hot_entropy_threshold} "
+        f"flat_hot: entropy>={args.hot_entropy_threshold} "
         f"min_hot_injected={args.min_hot_injected} theta_a={args.theta_a} "
         f"theta_c={args.theta_c} contradiction_top_k={args.contradiction_top_k}"
     )
@@ -883,6 +1260,33 @@ def main() -> None:
                 dreaming=args.main_llm_model,
             )
         )
+    process_log_path: Path | None = None
+    if args.process_log_jsonl is not None:
+        process_log_path = (
+            args.process_log_jsonl
+            if args.process_log_jsonl.is_absolute()
+            else ROOT / args.process_log_jsonl
+        )
+    plog = ProcessLogWriter(process_log_path)
+    plog.emit(
+        {
+            "kind": "run_start",
+            "wall_time": time.time(),
+            "argv": sys.argv,
+            "embedding": args.embedding,
+            "adoption_method": args.adoption_method,
+            "full_agent": bool(args.full_agent),
+            "reranker_backend": args.reranker_backend,
+            "reranker_model": args.reranker_model,
+            "dynamics": asdict(dynamics),
+            "n_questions_requested": args.n_questions,
+            "multi_only": args.multi_only,
+            "single_only": args.single_only,
+        }
+    )
+    if process_log_path is not None:
+        progress(f"[agent-harness] process log (JSONL) -> {process_log_path}")
+
     per_question: list[dict[str, Any]] = []
     started = time.perf_counter()
 
@@ -971,6 +1375,9 @@ def main() -> None:
                 embed_fn=active_embed_fn,
                 dynamics=dynamics,
                 namespace=namespace + ":cosine",
+                process_log=plog.emit,
+                question_id=qid,
+                question_index=idx,
         )
         progress(
             f"[agent-harness] Q{idx} method=cosine done "
@@ -992,6 +1399,10 @@ def main() -> None:
                 adopt=True,
                 llm=llm,
                 trace_events=args.trace_events,
+                process_log=plog.emit,
+                question_id=qid,
+                question_index=idx,
+                method_label="lambda_embedding_adoption",
         )
         progress(
             f"[agent-harness] Q{idx} method=lambda_embedding_adoption done "
@@ -1014,6 +1425,10 @@ def main() -> None:
                 adopt=False,
                 llm=None,
                 trace_events=args.trace_events,
+                process_log=plog.emit,
+                question_id=qid,
+                question_index=idx,
+                method_label="lambda_no_adoption",
         )
         progress(
             f"[agent-harness] Q{idx} method=lambda_no_adoption done "
@@ -1040,6 +1455,9 @@ def main() -> None:
                 reranker_backend=args.reranker_backend,
                 reranker_model=args.reranker_model,
                 trace_events=args.trace_events,
+                process_log=plog.emit,
+                question_id=qid,
+                question_index=idx,
             )
             progress(
                 f"[agent-harness] Q{idx} method=full_agent_memory done "
@@ -1060,11 +1478,12 @@ def main() -> None:
             row[method] = asdict(results[method])
             m = results[method].session_metrics["k10"]
             progress(
-                f"  {method:25s} recall@{dynamics.final_top_k}="
-                f"{results[method].session_recall_at_k:.3f} "
+                f"  {method:25s} k10_recall={m['recall']:.3f} "
                 f"k10_mrr={m['mrr']:.3f} k10_srr={m['srr']:.3f} "
                 f"adopted={results[method].replay_events.get('adopted', 0)} "
-                f"cold_triggered={results[method].replay_events.get('cold_triggered', 0)}"
+                f"suppressed={results[method].replay_events.get('contradicted', 0)} "
+                f"cold_triggered={results[method].replay_events.get('cold_triggered', 0)} "
+                f"llm_calls={results[method].replay_events.get('llm_calls', 0)}"
             )
         per_question.append(row)
 
@@ -1088,14 +1507,10 @@ def main() -> None:
             "n_questions": len(per_question),
             "multi_only": args.multi_only,
             "single_only": args.single_only,
+            "process_log_jsonl": str(process_log_path) if process_log_path else None,
         },
         "aggregate": {
             method: {
-                "session_recall_at_k": float(
-                    np.mean([q[method]["session_recall_at_k"] for q in per_question])
-                )
-                if per_question
-                else 0.0,
                 "metrics": {
                     f"k{k}": {
                         metric: mean_metric(per_question, method, k, metric)
@@ -1136,14 +1551,26 @@ def main() -> None:
     progress(f"\n[agent-harness] wrote {out_json}")
     for method in methods:
         agg = summary["aggregate"][method]
+        k10 = agg["metrics"]["k10"]
         progress(
-            f"[agent-harness] {method:25s} recall@{dynamics.final_top_k}="
-            f"{agg['session_recall_at_k']:.3f} "
-            f"k10_mrr={agg['metrics']['k10']['mrr']:.3f} "
-            f"k10_srr={agg['metrics']['k10']['srr']:.3f} "
+            f"[agent-harness] {method:25s} k10_recall={k10['recall']:.3f} "
+            f"k10_mrr={k10['mrr']:.3f} "
+            f"k10_srr={k10['srr']:.3f} "
             f"cold_triggered={agg['replay_events'].get('cold_triggered', 0)} "
+            f"suppressed={agg['replay_events'].get('contradicted', 0)} "
             f"llm_calls={agg['replay_events']['llm_calls']}"
         )
+
+    plog.emit(
+        {
+            "kind": "run_end",
+            "wall_time": time.time(),
+            "questions_completed": len(per_question),
+            "elapsed_seconds": round(time.perf_counter() - started, 2),
+            "summary_json": str(out_json),
+        }
+    )
+    plog.close()
 
 
 if __name__ == "__main__":

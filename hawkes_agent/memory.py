@@ -276,8 +276,11 @@ class InMemoryVectorStore:
                 "cold_triggered": 0,
                 "cold_trigger_reason": None,
                 "hot_top1_score": 0.0,
+                "hot_top1_hawkes": 0.0,
                 "hot_margin": 0.0,
                 "hot_score_entropy": 0.0,
+                "hot_rerank_pool_size": 0,
+                "hot_rerank_ge_cutoff_count": 0,
             }
 
         q = normalize_vector(query_embedding)
@@ -320,23 +323,22 @@ class InMemoryVectorStore:
 
         trigger_reasons: list[str] = []
         cutoff = dynamics.tau_r if threshold is None else float(threshold)
+        hot_rerank_pool_size = len(hot_ranked)
+        hot_rerank_ge_cutoff_count = int(sum(1 for s in hot_ranked if s.rerank_score >= cutoff))
         if hot_top1_rerank < cutoff or hot_top1_hawkes < dynamics.tau_h:
             trigger_reasons.append("low_confidence")
-        if len(hot_ranked) >= 2 and (
-            hot_margin < dynamics.hot_margin_threshold
-            or hot_entropy >= dynamics.hot_entropy_threshold
-        ):
+        if len(hot_ranked) >= 2 and hot_entropy >= dynamics.hot_entropy_threshold:
             trigger_reasons.append("flat_hot_distribution")
         if sum(1 for s in hot_ranked if s.rerank_score >= cutoff) < dynamics.min_hot_injected:
             trigger_reasons.append("insufficient_hot_coverage")
-        if self._query_asks_old_or_exact(query):
-            trigger_reasons.append("explicit_old_or_exact_query")
 
         meta_tail = {
             "hot_top1_score": float(hot_top1_rerank),
             "hot_top1_hawkes": float(hot_top1_hawkes),
             "hot_margin": float(hot_margin),
             "hot_score_entropy": float(hot_entropy),
+            "hot_rerank_pool_size": int(hot_rerank_pool_size),
+            "hot_rerank_ge_cutoff_count": int(hot_rerank_ge_cutoff_count),
         }
 
         if not trigger_reasons:
@@ -588,32 +590,3 @@ class InMemoryVectorStore:
         probs = arr / float(np.sum(arr))
         entropy = -float(np.sum([p * math.log(p) for p in probs if p > 0.0]))
         return entropy / math.log(len(scores))
-
-    def _query_asks_old_or_exact(self, query: str) -> bool:
-        markers = (
-            "以前",
-            "上次",
-            "最早",
-            "之前",
-            "说过",
-            "具体编号",
-            "哪一天",
-            "哪个房间",
-            "previous",
-            "before",
-            "earlier",
-            "last time",
-            "first",
-            "old",
-            "date",
-            "which day",
-            "room",
-            "number",
-            "id",
-            "invoice",
-            "model",
-        )
-        lower = query.lower()
-        if any(marker in lower for marker in markers):
-            return True
-        return bool(__import__("re").search(r"\b[A-Z]{1,5}[-_]?\d{2,}\b|\b\d{3,}\b", query))

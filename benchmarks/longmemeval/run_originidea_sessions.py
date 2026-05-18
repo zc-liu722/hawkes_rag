@@ -107,7 +107,10 @@ def session_metrics_at_k(
     recall = len(set(topk).intersection(gold_session_indices)) / len(gold_session_indices)
     hit = 1.0 if hits else 0.0
     mrr = 1.0 / (hits[0] + 1) if hits else 0.0
-    pos = {sid: idx for idx, sid in enumerate(retrieved_session_indices)}
+    pos: dict[int, int] = {}
+    for idx, sid in enumerate(retrieved_session_indices):
+        if sid not in pos:
+            pos[sid] = idx
     srr = 0.0
     for g in gold_session_indices:
         if g not in pos:

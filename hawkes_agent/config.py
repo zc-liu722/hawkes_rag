@@ -27,8 +27,8 @@ class DynamicsConfig:
     tau_r: float = 0.10
     alpha: float = 0.5
     theta_flat: float = 0.85
-    hot_margin_threshold: float = 0.05
-    hot_entropy_threshold: float = 0.90
+    #: ``flat_hot_distribution``: hot rerank pool (≥2 items) normalized entropy exceeds this.
+    hot_entropy_threshold: float = 0.95
     intermediate_top_k: int = 20
     final_top_k: int = 10
     hot_top_k: int = 3
