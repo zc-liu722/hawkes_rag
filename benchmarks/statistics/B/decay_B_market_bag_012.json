@@ -1,0 +1,801 @@
+{
+  "scenario_id": "decay_B_market_bag_012",
+  "category": "decay_forget",
+  "description": "合住伴侣长期默认带可折叠帆布袋和小网兜买菜，中间因雨天、仓储超市、冷冻品、礼品、海鲜和团购短暂使用塑料袋、纸箱、保温袋、礼品袋等，最后询问玄关默认放哪种买菜袋。",
+  "persona": "user1 和 user2 是共同做饭的伴侣，user2 常去菜市场买菜，user1 负责整理玄关、清洁袋子和处理回收物。",
+  "turns": [
+    {
+      "idx": 0,
+      "t": "2025-03-10T16:20",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我下午去菜市场，你那个折叠菜袋还在玄关抽屉吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "在，我长期买菜都用那只帆布折叠菜袋，够结实也不用每次拿塑料袋。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 1,
+      "t": "2025-03-11T02:29",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天要买土豆和牛奶，会不会太沉，帆布袋撑得住吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "撑得住，它肩带宽，我背着比拎塑料袋舒服，也不会勒手。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 2,
+      "t": "2025-03-11T12:38",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "雨下得特别大，摊主说塑料袋免费，要不要今天直接用两个？"
+        },
+        {
+          "speaker": "user2",
+          "text": "今天可以用塑料袋防水，别把菜淋湿了，但这只是雨天应急。"
+        }
+      ],
+      "tags": [
+        "negative:rain_plastic"
+      ]
+    },
+    {
+      "idx": 3,
+      "t": "2025-03-11T22:47",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "昨晚塑料袋挂在门把手，我差点以为你开始囤袋子。"
+        },
+        {
+          "speaker": "user2",
+          "text": "没有，雨天才用一次，平时还是带自己的折叠菜袋，少制造一堆薄袋。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 4,
+      "t": "2025-03-12T08:20",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "周末去仓储超市，那里有很大的纸箱，可以直接把东西装回家。"
+        },
+        {
+          "speaker": "user2",
+          "text": "大采购可以用纸箱，尤其买纸巾饮料，但日常菜市场我不靠箱子。"
+        }
+      ],
+      "tags": [
+        "negative:warehouse_box"
+      ]
+    },
+    {
+      "idx": 5,
+      "t": "2025-03-12T18:29",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "纸箱占了半个阳台，我明天拆掉可以吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "拆吧，它只是仓储超市临时包装，平时买菜还是那个能折起来的袋子。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 6,
+      "t": "2025-03-13T04:38",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你说那个袋子内袋有点脏，我今晚帮你洗一下。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好，晾干后放回玄关，出门顺手拿是我坚持得住的原因。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 7,
+      "t": "2025-03-13T14:47",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "水果店送了一个保温袋，说买冰淇淋回家不会化。"
+        },
+        {
+          "speaker": "user2",
+          "text": "买冰淇淋可以用保温袋，今天有用，但它不适合装青菜和葱。"
+        }
+      ],
+      "tags": [
+        "negative:insulated_bag"
+      ]
+    },
+    {
+      "idx": 8,
+      "t": "2025-03-14T00:20",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "保温袋我收进柜子了，平时还放玄关吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "不用，只有冷冻东西才拿，玄关默认留帆布折叠菜袋就够。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 9,
+      "t": "2025-03-14T10:29",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天你买了很多散装蘑菇，没用一次性袋会不会串味？"
+        },
+        {
+          "speaker": "user2",
+          "text": "我会用小网兜分开，外面还是帆布袋，长期这样比较顺手。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 10,
+      "t": "2025-03-14T20:38",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "邻居送了一个藤编篮子，拍照真的很好看。"
+        },
+        {
+          "speaker": "user2",
+          "text": "周末野餐可以拿它，菜市场人挤人时藤篮太占地方，不是日常选择。"
+        }
+      ],
+      "tags": [
+        "negative:wicker_basket"
+      ]
+    },
+    {
+      "idx": 11,
+      "t": "2025-03-15T06:47",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "藤篮放客厅装杂志了，看起来挺合适。"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，让它当装饰就好，买菜默认别拿，会磕到别人腿。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 12,
+      "t": "2025-03-15T16:20",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "明早你要赶地铁，我怕你忘带袋子，要不要放进包里？"
+        },
+        {
+          "speaker": "user2",
+          "text": "放包里吧，它折起来很小，临时下班买菜也能用。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 13,
+      "t": "2025-03-16T02:29",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "公司楼下便利店积分能换一个透明购物袋，你要不要？"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以换来装湿伞或临时文件，但买菜别默认透明袋，容量也不合适。"
+        }
+      ],
+      "tags": [
+        "negative:clear_shop_bag"
+      ]
+    },
+    {
+      "idx": 14,
+      "t": "2025-03-16T12:38",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "透明袋今天被你拿去装雨伞了，确实方便。"
+        },
+        {
+          "speaker": "user2",
+          "text": "它适合这个用途，长期买菜还是帆布袋，耐脏耐重。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 15,
+      "t": "2025-03-16T22:47",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我看你袋子里还有两个小网兜，是买番茄用的吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，散装水果蔬菜进网兜，再一起放帆布袋，这样不用薄塑料袋。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 16,
+      "t": "2025-03-17T08:20",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "外卖平台送了满减菜箱，今天不用出门买菜了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "今天忙可以收一次菜箱，但我不想长期靠一次性泡沫盒和冰袋。"
+        }
+      ],
+      "tags": [
+        "negative:delivery_box"
+      ]
+    },
+    {
+      "idx": 17,
+      "t": "2025-03-17T18:29",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "菜箱的冰袋我已经退回回收点了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "辛苦了，所以这种服务偶尔救急可以，日常还是自己带袋买更新鲜。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 18,
+      "t": "2025-03-18T04:38",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "周五要给办公室带水果，普通袋子可能不够体面。"
+        },
+        {
+          "speaker": "user2",
+          "text": "给同事带礼可以用礼品纸袋，场合不同，自己买菜不用这么讲究。"
+        }
+      ],
+      "tags": [
+        "negative:gift_bag"
+      ]
+    },
+    {
+      "idx": 19,
+      "t": "2025-03-18T14:47",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "那个礼品纸袋你还留着吗，我想装旧书。"
+        },
+        {
+          "speaker": "user2",
+          "text": "留着装旧书可以，但别放玄关当买菜袋，它提手不结实。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 20,
+      "t": "2025-03-19T00:20",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天市场新来了卖豆腐的摊位，汤汁会不会漏到帆布袋上？"
+        },
+        {
+          "speaker": "user2",
+          "text": "豆腐单独让老板封好，再放袋子外侧，平时我就是这样处理。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 21,
+      "t": "2025-03-19T10:29",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你妈说拉杆小车省力，要不要以后买菜推一个？"
+        },
+        {
+          "speaker": "user2",
+          "text": "大量采购可以借小车，日常两三天的菜用帆布袋更灵活，上楼也方便。"
+        }
+      ],
+      "tags": [
+        "negative:trolley_cart"
+      ]
+    },
+    {
+      "idx": 22,
+      "t": "2025-03-19T20:38",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "昨天小车轮子卡在电梯缝里，确实有点麻烦。"
+        },
+        {
+          "speaker": "user2",
+          "text": "所以它只适合一次性买米买油，普通买菜别默认推车。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 23,
+      "t": "2025-03-20T06:47",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我给袋子缝了一个小内袋，钥匙不会掉到菜下面。"
+        },
+        {
+          "speaker": "user2",
+          "text": "太好了，这样它更适合日常用了，我最怕结账后找不到钥匙。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 24,
+      "t": "2025-03-20T16:20",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "楼下环保活动发了无纺布袋，上面印着很大的广告。"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以拿来装可回收物，但无纺布不耐洗，我不会长期拿它买菜。"
+        }
+      ],
+      "tags": [
+        "negative:promo_bag"
+      ]
+    },
+    {
+      "idx": 25,
+      "t": "2025-03-21T02:29",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "广告袋今天装瓶子拿去回收了，刚好不心疼。"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，它临时用途挺好，真正反复用的还是那只帆布袋。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 26,
+      "t": "2025-03-21T12:38",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你最近连去小超市买鸡蛋也会带袋子。"
+        },
+        {
+          "speaker": "user2",
+          "text": "习惯了，玄关顺手拿一个，回来不用处理一堆塑料袋。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 27,
+      "t": "2025-03-21T22:47",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "海鲜摊老板给了厚塑料袋，他说不然腥味会出来。"
+        },
+        {
+          "speaker": "user2",
+          "text": "买海鲜可以接受厚袋密封，回家马上处理，这不是日常蔬菜默认。"
+        }
+      ],
+      "tags": [
+        "negative:seafood_plastic"
+      ]
+    },
+    {
+      "idx": 28,
+      "t": "2025-03-22T08:20",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "海鲜袋我扔到楼下垃圾房了，味道太重。"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，特殊食材特殊处理，普通买菜还是干净帆布袋加小网兜。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 29,
+      "t": "2025-03-22T18:29",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我把折叠菜袋补了一个扣子，叠起来不会散开。"
+        },
+        {
+          "speaker": "user2",
+          "text": "厉害，这样放包里更方便，越方便我越能长期坚持。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 30,
+      "t": "2025-03-23T04:38",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "社区团购发货点说下次可以给我们留周转筐。"
+        },
+        {
+          "speaker": "user2",
+          "text": "周转筐拿一大单可以，记得及时还，日常去市场别背个筐。"
+        }
+      ],
+      "tags": [
+        "negative:returnable_crate"
+      ]
+    },
+    {
+      "idx": 31,
+      "t": "2025-03-23T14:47",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "周转筐还回去了，押金也退了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好，那就是团购那次的安排，不用改变玄关默认配置。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 32,
+      "t": "2025-03-24T00:20",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天你的袋子晒干了，我放在门口挂钩最外侧。"
+        },
+        {
+          "speaker": "user2",
+          "text": "正好，出门能看见，我就不会到了摊位才想起来。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 33,
+      "t": "2025-03-24T10:29",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "端午粽子礼盒有提袋，商家说袋子很厚可以复用。"
+        },
+        {
+          "speaker": "user2",
+          "text": "礼盒袋可以装礼物，买菜会太硬太窄，不要拿它替代我的菜袋。"
+        }
+      ],
+      "tags": [
+        "negative:festival_bag"
+      ]
+    },
+    {
+      "idx": 34,
+      "t": "2025-03-24T20:38",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "礼盒袋我折起来放柜顶了，怕占地方。"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以，节日袋子偶尔用，日常入口别堆太多，拿错会烦。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 35,
+      "t": "2025-03-25T06:47",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你这半年是不是一直用同一只灰绿色帆布袋？"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，它容量刚好，脏了能洗，长期买菜就是最稳定的选择。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 36,
+      "t": "2025-03-25T16:20",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "如果以后那只袋子坏了，你想换同款还是换拉链款？"
+        },
+        {
+          "speaker": "user2",
+          "text": "换同款或类似的，重点是能折、能洗、肩带舒服，不要太花。"
+        }
+      ],
+      "tags": [
+        "stable:canvas_bag"
+      ]
+    },
+    {
+      "idx": 37,
+      "t": "2025-03-26T02:29",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今晚我在楼下取快递，顺手把纸盒都压扁了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "谢谢，纸盒别堆门口，不然明天出门又容易绊一下。"
+        }
+      ],
+      "tags": [
+        "neutral:parcel"
+      ]
+    },
+    {
+      "idx": 38,
+      "t": "2025-03-26T12:38",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "明天早上我要去银行，你的身份证还在蓝色文件夹。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好，我会一起带户口本复印件，免得窗口又让我补材料。"
+        }
+      ],
+      "tags": [
+        "neutral:bank"
+      ]
+    },
+    {
+      "idx": 39,
+      "t": "2025-03-26T22:47",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "厨房水槽有点堵，我晚饭后通一下。"
+        },
+        {
+          "speaker": "user2",
+          "text": "小心别把零件冲走，今天就简单煮面，少洗几个锅。"
+        }
+      ],
+      "tags": [
+        "neutral:kitchen"
+      ]
+    },
+    {
+      "idx": 40,
+      "t": "2025-03-27T08:20",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "楼下通知周末电梯保养，我买菜最好避开上午那段时间。"
+        },
+        {
+          "speaker": "user2",
+          "text": "那就下午再去吧，反正冰箱里还有鸡蛋和番茄，早餐不受影响。"
+        }
+      ],
+      "tags": [
+        "neutral:elevator"
+      ]
+    },
+    {
+      "idx": 41,
+      "t": "2025-03-27T18:29",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "菜市场门口那家豆腐摊换人了，新老板切块特别大，我差点没认出来。"
+        },
+        {
+          "speaker": "user2",
+          "text": "下次可以先少买一点试试，固定习惯和临时尝鲜分开，不要一口气囤太多。"
+        }
+      ]
+    },
+    {
+      "idx": 42,
+      "t": "2025-03-28T04:38",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "楼下回收箱今天满了，纸袋我先压平放门后，等明天再拿下去。"
+        },
+        {
+          "speaker": "user2",
+          "text": "放门后可以，别堆到厨房过道，晚上经过容易踢到。"
+        }
+      ]
+    },
+    {
+      "idx": 43,
+      "t": "2025-03-28T14:47",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我把冰箱冷冻层清出一格，周末如果买鱼就有地方放。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好，冷冻别塞太满，找东西时翻半天也会影响做饭心情。"
+        }
+      ]
+    },
+    {
+      "idx": 44,
+      "t": "2025-03-29T00:20",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我准备在玄关重新安排买菜用品，按你长期默认习惯应该把哪种袋子放在最顺手的位置？"
+        },
+        {
+          "speaker": "user2",
+          "text": "按我一直最能反复用的那种放，别按偶尔的特殊采购来。"
+        }
+      ],
+      "tags": [
+        "query"
+      ]
+    }
+  ],
+  "evals": [
+    {
+      "query_turn": 44,
+      "type": "decay_forget",
+      "positive_turns": [
+        0,
+        15,
+        29,
+        35
+      ],
+      "negative_turns": [
+        16,
+        21,
+        27,
+        33
+      ],
+      "pairs": [
+        {
+          "positive": 15,
+          "negative": 21
+        },
+        {
+          "positive": 29,
+          "negative": 27
+        },
+        {
+          "positive": 35,
+          "negative": 33
+        }
+      ],
+      "top_k": [
+        1,
+        3,
+        5
+      ]
+    }
+  ]
+}

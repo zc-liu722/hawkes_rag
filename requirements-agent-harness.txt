@@ -1,0 +1,5 @@
+langgraph>=1.2.0
+litellm>=1.83.0
+pydantic-ai>=1.97.0
+sentence-transformers
+numpy

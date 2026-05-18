@@ -1,0 +1,776 @@
+{
+  "scenario_id": "decay_B_desk_lighting_010",
+  "category": "decay_forget",
+  "description": "插画师长期偏好稳定暖白桌灯作为工作光线，中间因聚餐、派对、拍摄、市集和娱乐短暂使用蜡烛、彩灯、补光灯、霓虹等，最后询问夜间画稿默认开灯方式。",
+  "persona": "user1 和 user2 是合住的朋友，user2 做自由插画和小型市集摊位，user1 常帮忙整理书桌、布置房间和处理快递。",
+  "turns": [
+    {
+      "idx": 0,
+      "t": "2025-02-03T19:10:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我今晚把共享书桌收出来，你画稿时要不要开顶灯还是只开桌灯？"
+        },
+        {
+          "speaker": "user2",
+          "text": "还是开那盏暖白桌灯就好，我长期画细节时需要光线集中但不刺眼，顶灯太亮会让我烦。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 1,
+      "t": "2025-02-03T22:17:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你的新色卡到了，我怕阴影影响判断，要不要把窗边灯也打开？"
+        },
+        {
+          "speaker": "user2",
+          "text": "窗边灯可以关着，我更习惯暖白桌灯贴着纸面，颜色虽然不展览级但眼睛最舒服。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 2,
+      "t": "2025-02-04T01:24:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今晚我们吃火锅，要不要点两根香薰蜡烛，照片会比较有气氛。"
+        },
+        {
+          "speaker": "user2",
+          "text": "吃饭可以点蜡烛，拍照也好看，但那种摇晃的光不适合我长期工作。"
+        }
+      ],
+      "tags": [
+        "negative:candle_dinner"
+      ]
+    },
+    {
+      "idx": 3,
+      "t": "2025-02-04T04:31:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "昨天蜡烛杯还留在桌角，我差点以为你要用它画草图。"
+        },
+        {
+          "speaker": "user2",
+          "text": "别用，蜡烛只是聚餐气氛，我画线稿还是要稳定的暖白桌灯，阴影别乱跳。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 4,
+      "t": "2025-02-04T07:38:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "周末朋友来玩桌游，彩色氛围灯要不要装在书架后面？"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以装一次，大家拍合照会开心，但我平时看稿别开彩色灯，会分散注意力。"
+        }
+      ],
+      "tags": [
+        "negative:rgb_party"
+      ]
+    },
+    {
+      "idx": 5,
+      "t": "2025-02-04T10:45:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "彩灯遥控器放抽屉了，你今天要不要继续留一点蓝光？"
+        },
+        {
+          "speaker": "user2",
+          "text": "不用，昨天是热闹场合，今天做版式还是暖白桌灯，蓝光看久了纸面发冷。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 6,
+      "t": "2025-02-04T19:52:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我把你的针管笔都排好了，桌面会不会还太暗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "不暗，桌灯照到右上角就行，我喜欢边缘有点暗，注意力能落在纸上。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 7,
+      "t": "2025-02-04T22:59:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "楼下咖啡馆说有夜间速写活动，现场全是小黄串灯。"
+        },
+        {
+          "speaker": "user2",
+          "text": "那种灯适合活动，我去玩一次可以，真要交稿就不能靠串灯看线。"
+        }
+      ],
+      "tags": [
+        "negative:string_light_event"
+      ]
+    },
+    {
+      "idx": 8,
+      "t": "2025-02-05T01:11:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "速写活动回来你眼睛酸吗，我看照片里灯串挺梦幻。"
+        },
+        {
+          "speaker": "user2",
+          "text": "酸，梦幻归梦幻，长期还是稳稳的暖白桌灯，别让我在闪烁光下赶图。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 9,
+      "t": "2025-02-05T04:18:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "明天要拍租房短视频，摄影师说可以用强补光灯照工作区。"
+        },
+        {
+          "speaker": "user2",
+          "text": "拍视频可以开补光灯，画面干净一点，但它太直，我工作时不会默认用。"
+        }
+      ],
+      "tags": [
+        "negative:video_softbox"
+      ]
+    },
+    {
+      "idx": 10,
+      "t": "2025-02-05T07:25:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "补光灯箱子放在门后，我是不是该把它收起来？"
+        },
+        {
+          "speaker": "user2",
+          "text": "收起来吧，只有拍摄需要它，平时桌上留那盏角度可调的暖白灯就够。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 11,
+      "t": "2025-02-05T10:32:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你今天在厨房量尺寸，我顺手把台灯挪过去了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "等下拿回来，我晚上还要修草图，长期用熟的光源位置不要变。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 12,
+      "t": "2025-02-05T19:39:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "停电演练通知说晚上可能闪一下，要不要准备露营灯？"
+        },
+        {
+          "speaker": "user2",
+          "text": "准备可以，真停电就用露营灯应急，但那只是应急，不是我正常工作光线。"
+        }
+      ],
+      "tags": [
+        "negative:camp_lantern"
+      ]
+    },
+    {
+      "idx": 13,
+      "t": "2025-02-05T22:46:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "昨晚露营灯还挺亮，你会不会觉得它比桌灯方便？"
+        },
+        {
+          "speaker": "user2",
+          "text": "不会，它照得太散，长时间画稿还是暖白桌灯最稳，纸面阴影少。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 14,
+      "t": "2025-02-06T01:53:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我买了新的灯泡，有冷白和暖白两种，你更想先试哪个？"
+        },
+        {
+          "speaker": "user2",
+          "text": "先装暖白，四千开以下就好，我不喜欢像办公室一样白得发蓝。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 15,
+      "t": "2025-02-06T05:00:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "同事送了一个星空投影灯，说晚上开着很放松。"
+        },
+        {
+          "speaker": "user2",
+          "text": "睡前看一会儿可以，别放到工作桌默认开，星点会让我一直抬头看。"
+        }
+      ],
+      "tags": [
+        "negative:star_projector"
+      ]
+    },
+    {
+      "idx": 16,
+      "t": "2025-02-06T07:12:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你昨晚看投影灯看到快十二点，今天会不会犯困？"
+        },
+        {
+          "speaker": "user2",
+          "text": "有点，所以它只能当新鲜玩具，真正要做事还是桌灯和清桌面。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 17,
+      "t": "2025-02-06T10:19:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天窗外阳光很好，我把窗帘拉开会不会更适合画色块？"
+        },
+        {
+          "speaker": "user2",
+          "text": "白天可以借自然光，但晚上默认还是那盏暖白桌灯，最不挑天气。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 18,
+      "t": "2025-02-06T19:26:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你妈来住那晚说客厅大灯更亮，她怕你近视加深。"
+        },
+        {
+          "speaker": "user2",
+          "text": "她是关心我，但大灯会照到屏幕反光，我长期还是靠桌灯局部照明。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 19,
+      "t": "2025-02-06T22:33:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "生日那天我想把小彩灯绕在画框上，给你一个惊喜。"
+        },
+        {
+          "speaker": "user2",
+          "text": "生日可以，偶尔仪式感没问题，只是别把彩灯当我日常画稿需要。"
+        }
+      ],
+      "tags": [
+        "negative:birthday_lights"
+      ]
+    },
+    {
+      "idx": 20,
+      "t": "2025-02-07T01:40:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "彩灯拍出来很漂亮，你有没有想长期留下它？"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以留在画框边，工作时不开。我需要的是不抢戏的暖白桌灯。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 21,
+      "t": "2025-02-07T04:47:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "这周你连续三晚改封面，我看桌灯一直开到很晚。"
+        },
+        {
+          "speaker": "user2",
+          "text": "是啊，它角度固定，亮度也刚好，我眼睛没那么累，能坐得住。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 22,
+      "t": "2025-02-07T07:54:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今晚物业检修楼道，你要不要去客厅借更亮的吸顶灯？"
+        },
+        {
+          "speaker": "user2",
+          "text": "不用，吸顶灯照得人心浮，我在书桌开小范围灯更能专心。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 23,
+      "t": "2025-02-07T11:01:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "朋友送的香薰机有呼吸灯，说明书说能营造沉浸感。"
+        },
+        {
+          "speaker": "user2",
+          "text": "呼吸灯睡前可以开，工作时不要闪，我不想余光一直被它提醒。"
+        }
+      ],
+      "tags": [
+        "negative:diffuser_light"
+      ]
+    },
+    {
+      "idx": 24,
+      "t": "2025-02-07T19:13:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我把香薰机灯关了，只留加湿功能，这样可以吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "这样可以，桌面光线还是让台灯负责，别混成一堆亮点。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 25,
+      "t": "2025-02-07T22:20:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你今天换了新显示器，屏幕亮度是不是也会影响画稿？"
+        },
+        {
+          "speaker": "user2",
+          "text": "会，所以屏幕调暗一点，纸面仍然靠暖白桌灯，我要两边不要差太多。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 26,
+      "t": "2025-02-08T01:27:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "下周市集摊位晚上营业，摊主群说要用霓虹灯吸引人。"
+        },
+        {
+          "speaker": "user2",
+          "text": "市集可以用霓虹，摊位需要显眼，但那是卖东西，不是我在家画图。"
+        }
+      ],
+      "tags": [
+        "negative:market_neon"
+      ]
+    },
+    {
+      "idx": 27,
+      "t": "2025-02-08T04:34:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "霓虹灯牌放回来了，要不要挂在工作桌上方？"
+        },
+        {
+          "speaker": "user2",
+          "text": "别挂桌上方，放玄关拍照就行，我工作区长期越简单越好。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 28,
+      "t": "2025-02-08T07:41:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我今天整理电线，发现桌灯插头有点松，要不要换新灯？"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以换同类型的，还是可调角度的暖白桌灯，别换成花哨氛围灯。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 29,
+      "t": "2025-02-08T10:48:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你最近总说肩颈紧，站着画会不会需要落地灯？"
+        },
+        {
+          "speaker": "user2",
+          "text": "落地灯可以试试补一点环境光，但主要光源还是桌灯，纸面要清楚。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 30,
+      "t": "2025-02-08T19:55:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "美术馆夜场的灯光很柔，你说那面墙特别舒服。"
+        },
+        {
+          "speaker": "user2",
+          "text": "看展舒服不等于工作舒服，展厅光是给作品的，我画稿要看笔触。"
+        }
+      ],
+      "tags": [
+        "negative:gallery_light"
+      ]
+    },
+    {
+      "idx": 31,
+      "t": "2025-02-08T23:02:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你把展览手册带回来，今晚还要翻吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "会翻，但翻手册也开桌灯，我不想开一屋子的灯让人清醒过头。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 32,
+      "t": "2025-02-09T01:14:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天快递到了，是你订的替换灯泡，我放书桌抽屉。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好，还是暖白的吧，这种小东西别临时换风格，我会不适应。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 33,
+      "t": "2025-02-09T04:21:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "明晚邻居孩子生日，可能借我们那个投影灯布置客厅。"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以借给他们，反正它本来就不是我工作必需品，别借走桌灯就行。"
+        }
+      ],
+      "tags": [
+        "negative:borrow_projector"
+      ]
+    },
+    {
+      "idx": 34,
+      "t": "2025-02-09T07:28:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "邻居还回投影灯了，孩子说特别喜欢。"
+        },
+        {
+          "speaker": "user2",
+          "text": "挺好，放回杂物柜吧，工作桌只留必要的灯和笔。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 35,
+      "t": "2025-02-09T10:35:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你这几天改稿都没抱怨眼睛疼，是不是灯泡换得合适？"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，暖白不刺眼，亮度稳定，我长期就需要这种不打扰人的光。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 36,
+      "t": "2025-02-09T19:42:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "周五我们看电影，要不要把客厅调成暗一点的影院模式？"
+        },
+        {
+          "speaker": "user2",
+          "text": "看电影当然暗一点，临时娱乐和工作不是一回事，别混着记。"
+        }
+      ],
+      "tags": [
+        "negative:movie_dim"
+      ]
+    },
+    {
+      "idx": 37,
+      "t": "2025-02-09T22:49:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "电影遥控器还在桌上，我顺手收起来了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "收吧，今晚我要核对合同插图，桌灯开到中档就够，不需要影院模式。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 38,
+      "t": "2025-02-10T01:56:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天我帮你把书桌擦了，笔架和灯的位置按原样摆回去了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "谢谢，灯的位置别变太多，我坐下不用重新找角度就能开始。"
+        }
+      ],
+      "tags": [
+        "stable:desk_lamp"
+      ]
+    },
+    {
+      "idx": 39,
+      "t": "2025-02-10T05:03:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你明天早上要去医院复查，我把证件放玄关夹层了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好，我今晚早点睡，画稿就先停一下，别再折腾桌面布置。"
+        }
+      ],
+      "tags": [
+        "neutral:appointment"
+      ]
+    },
+    {
+      "idx": 40,
+      "t": "2025-02-10T07:15:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "复查回来医生说没大问题吧，我煮点粥给你。"
+        },
+        {
+          "speaker": "user2",
+          "text": "没事，只是让少熬夜，今晚我只整理文件，不开长时间工作局。"
+        }
+      ],
+      "tags": [
+        "neutral:health"
+      ]
+    },
+    {
+      "idx": 41,
+      "t": "2025-02-10T10:22:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我顺手把快递纸箱拆了，客厅终于能走路。"
+        },
+        {
+          "speaker": "user2",
+          "text": "太好了，周末先别买新灯具，我们把家里多余东西清一清。"
+        }
+      ],
+      "tags": [
+        "neutral:cleanup"
+      ]
+    },
+    {
+      "idx": 42,
+      "t": "2025-02-10T19:29:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我准备以后你晚上要画稿时先帮你开灯，按你长期默认的工作光线应该怎么开？"
+        },
+        {
+          "speaker": "user2",
+          "text": "按我一直最稳的方式来就行，别按那些临时布置。"
+        }
+      ],
+      "tags": [
+        "query"
+      ]
+    }
+  ],
+  "evals": [
+    {
+      "query_turn": 42,
+      "type": "decay_forget",
+      "positive_turns": [
+        0,
+        13,
+        21,
+        35
+      ],
+      "negative_turns": [
+        2,
+        15,
+        26,
+        36
+      ],
+      "pairs": [
+        {
+          "positive": 13,
+          "negative": 15
+        },
+        {
+          "positive": 21,
+          "negative": 26
+        },
+        {
+          "positive": 35,
+          "negative": 36
+        }
+      ],
+      "top_k": [
+        1,
+        3,
+        5
+      ]
+    }
+  ]
+}

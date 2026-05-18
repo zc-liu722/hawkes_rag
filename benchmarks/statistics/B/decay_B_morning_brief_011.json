@@ -1,0 +1,787 @@
+{
+  "scenario_id": "decay_B_morning_brief_011",
+  "category": "decay_forget",
+  "description": "创业者长期偏好早上收到一条简短文字清单作为日程提醒，中间因路演、搬家、团建和试课短暂使用电话、便利贴、语音、闹钟、表格等，最后询问默认提醒模板。",
+  "persona": "user1 和 user2 是一起创业的伴侣，user2 负责商务和产品推进，user1 常帮他整理日程、票据和家务提醒。",
+  "turns": [
+    {
+      "idx": 0,
+      "t": "2025-03-01T07:50",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我帮你把明天的待办放进日历，提醒方式还是早上发一条文字清单吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，我长期最吃这一套，早上看到一条简短清单，比零散闹钟更能安排顺序。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 1,
+      "t": "2025-03-01T17:59",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你今天有三件事挤在上午，我要不要拆成三个弹窗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "别拆太碎，给我一个早间文字摘要就行，我自己按轻重缓急排。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 2,
+      "t": "2025-03-02T04:08",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天路演前我直接给你打电话提醒，可以吗，怕你没看手机。"
+        },
+        {
+          "speaker": "user2",
+          "text": "今天可以电话催一下，路演太紧张了，但平时别用电话当默认提醒。"
+        }
+      ],
+      "tags": [
+        "negative:urgent_call"
+      ]
+    },
+    {
+      "idx": 3,
+      "t": "2025-03-02T14:17",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "路演结束你嗓子都哑了，早上那通电话会不会太吵？"
+        },
+        {
+          "speaker": "user2",
+          "text": "是有点吵，特殊日子可以，长期我还是想安静看文字清单。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 4,
+      "t": "2025-03-02T23:50",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你同事送了一叠彩色便利贴，说贴电脑边上很醒目。"
+        },
+        {
+          "speaker": "user2",
+          "text": "便利贴临时不错，特别是今天要拿工牌，但长期贴满屏幕我会视觉疲劳。"
+        }
+      ],
+      "tags": [
+        "negative:sticky_notes"
+      ]
+    },
+    {
+      "idx": 5,
+      "t": "2025-03-03T09:59",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我把便利贴只留了一张，其他收进抽屉。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好，明天的事还是发成一条清单，别让桌面变成公告栏。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 6,
+      "t": "2025-03-03T20:08",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "周末要去看外婆，我给你列车票、药和水果三项就够吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "够，用文字发我，我早上扫一眼就知道出门前先做哪件。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 7,
+      "t": "2025-03-04T06:17",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你这周睡得晚，早上可能看不进字，要不要语音念给你听？"
+        },
+        {
+          "speaker": "user2",
+          "text": "明天偶尔可以语音，因为我起床要收行李，但长期不要，我会漏听细节。"
+        }
+      ],
+      "tags": [
+        "negative:voice_note"
+      ]
+    },
+    {
+      "idx": 8,
+      "t": "2025-03-04T15:50",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你后来还是让我把语音转成文字，是不是听着不踏实？"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，我需要能回看和打勾的东西，文字清单最稳，不怕忘。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 9,
+      "t": "2025-03-05T01:59",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "产品会那天我看到你在白板上画了整页流程。"
+        },
+        {
+          "speaker": "user2",
+          "text": "那是讨论用，提醒我个人行动还是文字清单，白板擦掉就没了。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 10,
+      "t": "2025-03-05T12:08",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "明天客户全天在公司，要不要我每小时提醒你一次？"
+        },
+        {
+          "speaker": "user2",
+          "text": "千万别，每小时弹一下会打断思路，早上给我总览就好。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 11,
+      "t": "2025-03-05T22:17",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天健身房私教让我帮你设运动打卡闹钟，声音很大。"
+        },
+        {
+          "speaker": "user2",
+          "text": "今天试课可以响一下，平时别弄大声闹钟，我会烦到直接关掉。"
+        }
+      ],
+      "tags": [
+        "negative:loud_alarm"
+      ]
+    },
+    {
+      "idx": 12,
+      "t": "2025-03-06T07:50",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "试课闹钟响的时候你脸都皱起来了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，我不喜欢被声音推着走，长期还是安静的文字提醒。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 13,
+      "t": "2025-03-06T17:59",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "下周报销截止，我能不能在日历里给你标红？"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以标红，但早上那条清单里也写上截止日，我看一处最省脑子。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 14,
+      "t": "2025-03-07T04:08",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你朋友推荐了一个任务管理 App，能做很复杂的看板。"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以周末玩一下模板，但别把我长期提醒迁到复杂看板里，我会懒得维护。"
+        }
+      ],
+      "tags": [
+        "negative:kanban_trial"
+      ]
+    },
+    {
+      "idx": 15,
+      "t": "2025-03-07T14:17",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "看板 App 你只打开了两天，今天又没填。"
+        },
+        {
+          "speaker": "user2",
+          "text": "所以别高估我，简单早间文字清单最适合我，复杂系统会荒掉。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 16,
+      "t": "2025-03-07T23:50",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天下雨，我在清单里加了带伞和提前十分钟出门。"
+        },
+        {
+          "speaker": "user2",
+          "text": "很好，这种顺手放到一条消息里，我出门前不会到处找提醒。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 17,
+      "t": "2025-03-08T09:59",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你妈说重要事应该写在冰箱贴上，家里人都能看到。"
+        },
+        {
+          "speaker": "user2",
+          "text": "家务可以贴冰箱，工作和个人安排还是别公开贴，给我文字就行。"
+        }
+      ],
+      "tags": [
+        "negative:fridge_note"
+      ]
+    },
+    {
+      "idx": 18,
+      "t": "2025-03-08T20:08",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "冰箱贴上那张缴费单我撕下来了，已经缴完。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好，临时家庭事务可以贴一下，默认安排别靠它，容易和广告磁贴混在一起。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 19,
+      "t": "2025-03-09T06:17",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你今天上午开会，我把提醒发太早会不会被淹掉？"
+        },
+        {
+          "speaker": "user2",
+          "text": "八点半左右正好，吃早饭时看一遍，后面就按清单走。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 20,
+      "t": "2025-03-09T15:50",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "团建那天组织者建了共享表格，你说所有人都在里面更新车次。"
+        },
+        {
+          "speaker": "user2",
+          "text": "多人协作可以用表格，只有提醒我自己时，一条文字更直接。"
+        }
+      ],
+      "tags": [
+        "negative:shared_sheet"
+      ]
+    },
+    {
+      "idx": 21,
+      "t": "2025-03-10T01:59",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "团建结束后共享表格还发通知，我给你退订了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "退得好，那种临时活动表格别变成日常提醒入口。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 22,
+      "t": "2025-03-10T12:08",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "明天要去体检，我把空腹、身份证和发票都写一起。"
+        },
+        {
+          "speaker": "user2",
+          "text": "就这样写，短一点但别漏关键限制，我早上照着检查包。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 23,
+      "t": "2025-03-10T22:17",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你今天收到银行短信太多，我怕我发的清单被压下去。"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以置顶我们的聊天，别改成电话轰炸，我看到置顶文字就行。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 24,
+      "t": "2025-03-11T07:50",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "晚上临睡前我提醒你明天要早起，你会不会更安心？"
+        },
+        {
+          "speaker": "user2",
+          "text": "偶尔可以睡前说一句，但真正执行还是靠早上的清单，不然半夜只会焦虑。"
+        }
+      ],
+      "tags": [
+        "negative:bedtime_ping"
+      ]
+    },
+    {
+      "idx": 25,
+      "t": "2025-03-11T17:59",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "昨晚说完早起你反而翻了半小时手机。"
+        },
+        {
+          "speaker": "user2",
+          "text": "所以睡前别讲太多任务，早上清醒时看文字更健康。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 26,
+      "t": "2025-03-12T04:08",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我今天把清单写成三行，会议、快递、药店，够不够？"
+        },
+        {
+          "speaker": "user2",
+          "text": "够，三行刚好，我不需要长篇说明，只要知道默认动作。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 27,
+      "t": "2025-03-12T14:17",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "公司新来的助理喜欢发语音播报，听起来很专业。"
+        },
+        {
+          "speaker": "user2",
+          "text": "专业归专业，我个人长期不适合语音播报，办公室戴耳机也不方便。"
+        }
+      ],
+      "tags": [
+        "negative:assistant_broadcast"
+      ]
+    },
+    {
+      "idx": 28,
+      "t": "2025-03-12T23:50",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你把助理语音听完了吗，她问我要不要以后都这样。"
+        },
+        {
+          "speaker": "user2",
+          "text": "不用，我会回她文字版更好，语音只适合临时说明复杂背景。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 29,
+      "t": "2025-03-13T09:59",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "周三有两笔自动扣费，我写在清单最上面。"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，钱相关的放前面，我早上看见就能先处理。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 30,
+      "t": "2025-03-13T20:08",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你最近开始用纸质手帐，我要不要把提醒也抄进去？"
+        },
+        {
+          "speaker": "user2",
+          "text": "手帐是我晚上复盘用的，早上启动还是靠你发的文字清单。"
+        }
+      ],
+      "tags": [
+        "negative:planner_phase"
+      ]
+    },
+    {
+      "idx": 31,
+      "t": "2025-03-14T06:17",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "手帐贴纸买了好多，你会不会坚持很久？"
+        },
+        {
+          "speaker": "user2",
+          "text": "也许会写一阵，但别把它当提醒主渠道，我容易漏翻。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 32,
+      "t": "2025-03-14T15:50",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天你在外面跑手续，我把地址和窗口号也写进清单了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "很好，清单里有地址最救命，我不想在路边翻好几段聊天。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 33,
+      "t": "2025-03-15T01:59",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "周末搬书柜，我要不要每个箱子都拍照发你确认？"
+        },
+        {
+          "speaker": "user2",
+          "text": "搬家当天可以拍照确认，平时提醒别变成图片流，我找文字更快。"
+        }
+      ],
+      "tags": [
+        "negative:photo_stream"
+      ]
+    },
+    {
+      "idx": 34,
+      "t": "2025-03-15T12:08",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "那些箱子照片我归到相册了，聊天里有点乱。"
+        },
+        {
+          "speaker": "user2",
+          "text": "谢谢，照片只适合这次搬东西，日常事项还是一条文字说清。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 35,
+      "t": "2025-03-15T22:17",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我发现你连续几个月都把早间清单看完才回我。"
+        },
+        {
+          "speaker": "user2",
+          "text": "是，这已经成习惯了，简短文字能让我知道今天从哪里开始。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 36,
+      "t": "2025-03-16T07:50",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "下周我可能出差两天，不能早上现场提醒你。"
+        },
+        {
+          "speaker": "user2",
+          "text": "没关系，你前一晚定时发文字清单也行，形式保持简单就好。"
+        }
+      ],
+      "tags": [
+        "stable:text_brief"
+      ]
+    },
+    {
+      "idx": 37,
+      "t": "2025-03-16T17:59",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天物业来修水管，师傅说到前会打电话。"
+        },
+        {
+          "speaker": "user2",
+          "text": "那种外部预约电话另说，你不用跟着改提醒方式，事情不同。"
+        }
+      ],
+      "tags": [
+        "neutral:plumber"
+      ]
+    },
+    {
+      "idx": 38,
+      "t": "2025-03-17T04:08",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "水管修完没有漏了，我把拖把放阳台晾着。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好，晚上别忘了把窗关上，最近风有点大。"
+        }
+      ],
+      "tags": [
+        "neutral:home"
+      ]
+    },
+    {
+      "idx": 39,
+      "t": "2025-03-17T14:17",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我明天要帮同事带一份文件，顺路去打印店。"
+        },
+        {
+          "speaker": "user2",
+          "text": "那你把自己的东西也放门口，别早上一起慌。"
+        }
+      ],
+      "tags": [
+        "neutral:errand"
+      ]
+    },
+    {
+      "idx": 40,
+      "t": "2025-03-17T23:50",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "打印店今天排队很久，我回来晚一点做饭。"
+        },
+        {
+          "speaker": "user2",
+          "text": "没事，我把米先泡上，晚饭简单点就行。"
+        }
+      ],
+      "tags": [
+        "neutral:dinner"
+      ]
+    },
+    {
+      "idx": 41,
+      "t": "2025-03-18T09:59",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我把厨房小白板擦了一遍，发现上面还留着上周买洗衣液的痕迹。"
+        },
+        {
+          "speaker": "user2",
+          "text": "怪不得我昨天看着像还有待办，擦干净以后明早看提醒也不会乱。"
+        }
+      ]
+    },
+    {
+      "idx": 42,
+      "t": "2025-03-18T20:08",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "外面雨声有点大，明天出门记得带折叠伞，不然刚到地铁口就湿一半。"
+        },
+        {
+          "speaker": "user2",
+          "text": "我放在包侧袋了，早上如果赶时间你也提醒我一句，最近脑子容易漏东西。"
+        }
+      ]
+    },
+    {
+      "idx": 43,
+      "t": "2025-03-19T06:17",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我准备给你设置日常任务提醒的默认模板，按你长期最顺手的方式应该怎么提醒？"
+        },
+        {
+          "speaker": "user2",
+          "text": "按我一直最容易执行的那个方式来，别按那些临时场景。"
+        }
+      ],
+      "tags": [
+        "query"
+      ]
+    }
+  ],
+  "evals": [
+    {
+      "query_turn": 43,
+      "type": "decay_forget",
+      "positive_turns": [
+        0,
+        15,
+        26,
+        35
+      ],
+      "negative_turns": [
+        14,
+        24,
+        30,
+        33
+      ],
+      "pairs": [
+        {
+          "positive": 15,
+          "negative": 24
+        },
+        {
+          "positive": 26,
+          "negative": 30
+        },
+        {
+          "positive": 35,
+          "negative": 33
+        }
+      ],
+      "top_k": [
+        1,
+        3,
+        5
+      ]
+    }
+  ]
+}

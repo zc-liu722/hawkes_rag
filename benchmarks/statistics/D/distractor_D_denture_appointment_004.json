@@ -1,0 +1,697 @@
+{
+  "scenario_id": "distractor_D_denture_appointment_004",
+  "category": "semantic_distractor",
+  "description": "外婆口腔预约从旧洁牙门店改为社区假牙调整，存在相似门店和项目干扰。",
+  "persona": "user1 是主要照顾外婆的孙辈，user2 是家人，帮忙核对预约和出行准备。",
+  "turns": [
+    {
+      "idx": 0,
+      "t": "2025-04-01T09:10",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我给外婆订了周六上午的口腔清洁，在瑞齿口腔建国门店，十点。"
+        },
+        {
+          "speaker": "user2",
+          "text": "她之前去过那家，但台阶有点高。先留着，看她腿这两天怎么样。"
+        }
+      ],
+      "tags": [
+        "distractor:old_clinic"
+      ]
+    },
+    {
+      "idx": 1,
+      "t": "2025-04-01T12:17",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "瑞齿客服说可以推轮椅上去，但要提前打电话。"
+        },
+        {
+          "speaker": "user2",
+          "text": "还算贴心，不过外婆最近一坐车就头晕，路程也要考虑。"
+        }
+      ]
+    },
+    {
+      "idx": 2,
+      "t": "2025-04-01T15:24",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "外婆今天说牙龈不疼了，反而是左边假牙磨。"
+        },
+        {
+          "speaker": "user2",
+          "text": "那清洁不一定解决。最好找能调假牙的地方。"
+        }
+      ]
+    },
+    {
+      "idx": 3,
+      "t": "2025-04-01T18:31",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "社区医生推荐了康桥社区口腔，说可以调假牙，也离家近。"
+        },
+        {
+          "speaker": "user2",
+          "text": "这更合适。问问有没有无障碍入口和具体医生。"
+        }
+      ]
+    },
+    {
+      "idx": 4,
+      "t": "2025-04-01T21:38",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "瑞齿那边还没取消，我怕占着名额不好。"
+        },
+        {
+          "speaker": "user2",
+          "text": "先取消建国门那边吧，不然周六一早容易按旧预约走。"
+        }
+      ],
+      "tags": [
+        "distractor:cancel_old_clinic"
+      ]
+    },
+    {
+      "idx": 5,
+      "t": "2025-04-02T00:45",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "取消了，客服说没关系，下次再约。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好，旧预约就结束了。我们围绕假牙调整来安排。"
+        }
+      ]
+    },
+    {
+      "idx": 6,
+      "t": "2025-04-02T03:52",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "康桥社区口腔回复：周六 9:20，二诊室，找刘琼医生，项目是假牙压痛调整。"
+        },
+        {
+          "speaker": "user2",
+          "text": "当前预约就是康桥社区口腔二诊室，周六九点二十，刘琼医生，做假牙压痛调整。"
+        }
+      ],
+      "tags": [
+        "positive:current_appointment"
+      ]
+    },
+    {
+      "idx": 7,
+      "t": "2025-04-02T06:59",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "康桥和康宁口腔是不是两家？我搜索出来好多相似名字。"
+        },
+        {
+          "speaker": "user2",
+          "text": "是两家。我们要去社区卫生服务中心里的康桥社区口腔，不是商场里的康宁。"
+        }
+      ],
+      "tags": [
+        "distractor:similar_clinic"
+      ]
+    },
+    {
+      "idx": 8,
+      "t": "2025-04-02T09:16",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "外婆问是不是洗牙，我说好像不是。"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，不是普通清洁，是调假牙压痛点。她要带假牙盒和旧病历。"
+        }
+      ],
+      "tags": [
+        "positive:item_reason"
+      ]
+    },
+    {
+      "idx": 9,
+      "t": "2025-04-03T06:23",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我把瑞齿建国门的短信删掉了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "删得好。留下会让她以为还是去老地方洗牙。"
+        }
+      ],
+      "tags": [
+        "distractor:deleted_old_clinic"
+      ]
+    },
+    {
+      "idx": 10,
+      "t": "2025-04-03T09:30",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "周六我打车还是推她走过去？"
+        },
+        {
+          "speaker": "user2",
+          "text": "如果天气好，推轮椅过去十五分钟。下雨就打车到社区中心东门。"
+        }
+      ]
+    },
+    {
+      "idx": 11,
+      "t": "2025-04-03T12:37",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "外婆不喜欢坐轮椅，说像病人。"
+        },
+        {
+          "speaker": "user2",
+          "text": "你跟她说只是省力，不代表不能走。到门口可以扶她下来。"
+        }
+      ]
+    },
+    {
+      "idx": 12,
+      "t": "2025-04-03T15:44",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "假牙盒在哪？"
+        },
+        {
+          "speaker": "user2",
+          "text": "她床头柜第二层，蓝色小盒。你提前洗干净晾干。"
+        }
+      ]
+    },
+    {
+      "idx": 13,
+      "t": "2025-04-03T18:51",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "旧病历我只找到一本 2022 年的。"
+        },
+        {
+          "speaker": "user2",
+          "text": "带上。还有社区卡和医保卡，三个放一个透明袋。"
+        }
+      ]
+    },
+    {
+      "idx": 14,
+      "t": "2025-04-03T21:58",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "刘琼医生是不是女医生？外婆比较在意。"
+        },
+        {
+          "speaker": "user2",
+          "text": "客服说是女医生，擅长修复调整。你可以提前告诉外婆，她会安心点。"
+        }
+      ],
+      "tags": [
+        "positive:doctor_detail"
+      ]
+    },
+    {
+      "idx": 15,
+      "t": "2025-04-04T00:15",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "瑞齿又发来优惠券，洁牙半价。"
+        },
+        {
+          "speaker": "user2",
+          "text": "别给外婆看，她会觉得便宜就该去。现在不是洁牙需求。"
+        }
+      ],
+      "tags": [
+        "distractor:coupon_old"
+      ]
+    },
+    {
+      "idx": 16,
+      "t": "2025-04-04T03:22",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我给她煮了软一点的面，她说左边还是硌。"
+        },
+        {
+          "speaker": "user2",
+          "text": "那周六去调正合适。今晚别让她啃硬水果。"
+        }
+      ]
+    },
+    {
+      "idx": 17,
+      "t": "2025-04-04T06:29",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "康桥社区中心周六人多吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "上午会有慢病取药的人。我们提前十五分钟到，二诊室在一楼走廊尽头。"
+        }
+      ]
+    },
+    {
+      "idx": 18,
+      "t": "2025-04-05T03:36",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "外婆说她想穿那双黑皮鞋。"
+        },
+        {
+          "speaker": "user2",
+          "text": "别穿，鞋底硬又滑。穿灰色运动鞋，方便走路。"
+        }
+      ]
+    },
+    {
+      "idx": 19,
+      "t": "2025-04-05T06:43",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我把透明袋准备好了，里面有医保卡和社区卡。"
+        },
+        {
+          "speaker": "user2",
+          "text": "再放旧病历，假牙盒明早放，今晚晾着。"
+        }
+      ]
+    },
+    {
+      "idx": 20,
+      "t": "2025-04-05T09:50",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "她听到要调假牙，有点怕疼。"
+        },
+        {
+          "speaker": "user2",
+          "text": "你说只是磨一点压痛处，不是拔牙。医生会先看哪里磨。"
+        }
+      ]
+    },
+    {
+      "idx": 21,
+      "t": "2025-04-05T12:57",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "康宁口腔的广告一直在地图上排前面。"
+        },
+        {
+          "speaker": "user2",
+          "text": "别点广告。地图收藏康桥社区卫生服务中心即可。"
+        }
+      ],
+      "tags": [
+        "distractor:map_ad"
+      ]
+    },
+    {
+      "idx": 22,
+      "t": "2025-04-05T15:14",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我收藏了康桥社区卫生服务中心东门。"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，到了东门进去问口腔二诊室。"
+        }
+      ],
+      "tags": [
+        "positive:route_current"
+      ]
+    },
+    {
+      "idx": 23,
+      "t": "2025-04-05T18:21",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "周六早上她要吃早饭吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "要吃软的，不要空腹去。可以小米粥和蒸蛋。"
+        }
+      ]
+    },
+    {
+      "idx": 24,
+      "t": "2025-04-05T21:28",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "外婆问需不需要带牙刷。"
+        },
+        {
+          "speaker": "user2",
+          "text": "不用特别带，带假牙盒就行。现场主要看假牙压点。"
+        }
+      ]
+    },
+    {
+      "idx": 25,
+      "t": "2025-04-06T00:35",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我把瑞齿旧预约从日历删了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "很好，日历只留康桥那条。"
+        }
+      ],
+      "tags": [
+        "distractor:calendar_old_removed"
+      ]
+    },
+    {
+      "idx": 26,
+      "t": "2025-04-06T03:42",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "如果她临时说不想去怎么办？"
+        },
+        {
+          "speaker": "user2",
+          "text": "先问是不是害怕。疼了好几天，拖着只会更不想戴假牙。"
+        }
+      ]
+    },
+    {
+      "idx": 27,
+      "t": "2025-04-07T00:49",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我给轮椅轮胎打了气。"
+        },
+        {
+          "speaker": "user2",
+          "text": "挺好。出门前检查刹车，社区中心坡道有点斜。"
+        }
+      ]
+    },
+    {
+      "idx": 28,
+      "t": "2025-04-07T03:56",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "天气预报周六阴天，不下雨。"
+        },
+        {
+          "speaker": "user2",
+          "text": "那推过去可以。带薄毯，她坐着会觉得腿冷。"
+        }
+      ]
+    },
+    {
+      "idx": 29,
+      "t": "2025-04-07T06:13",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "外婆今天精神不错，还给花浇水。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好事。别让她弯腰太久，明早留体力。"
+        }
+      ]
+    },
+    {
+      "idx": 30,
+      "t": "2025-04-07T09:20",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "二诊室是不是在二楼？名字让我有点误会。"
+        },
+        {
+          "speaker": "user2",
+          "text": "不是二楼，是一楼的第二诊室。到时看门牌二诊室。"
+        }
+      ],
+      "tags": [
+        "positive:room_clarify"
+      ]
+    },
+    {
+      "idx": 31,
+      "t": "2025-04-07T12:27",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我把小米和鸡蛋都准备好了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "明早七点半煮，八点四十出门差不多。"
+        }
+      ]
+    },
+    {
+      "idx": 32,
+      "t": "2025-04-07T15:34",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "她刚才又提老地方瑞齿，说那边装修好看。"
+        },
+        {
+          "speaker": "user2",
+          "text": "你别顺着聊装修，就说这次离家近、能调假牙。"
+        }
+      ],
+      "tags": [
+        "distractor:patient_old_preference"
+      ]
+    },
+    {
+      "idx": 33,
+      "t": "2025-04-07T18:41",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "医保卡在透明袋里，社区卡也在。"
+        },
+        {
+          "speaker": "user2",
+          "text": "很好。旧病历别忘，医生可能看以前的修复记录。"
+        }
+      ]
+    },
+    {
+      "idx": 34,
+      "t": "2025-04-07T21:48",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "假牙盒晾干了，我放在餐边柜。"
+        },
+        {
+          "speaker": "user2",
+          "text": "明早吃完饭再放进去，别今晚就收走，她可能还要试戴。"
+        }
+      ]
+    },
+    {
+      "idx": 35,
+      "t": "2025-04-08T00:55",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我有点担心路上她喊累。"
+        },
+        {
+          "speaker": "user2",
+          "text": "推轮椅就好，累了坐。我们提前出门，不赶时间。"
+        }
+      ]
+    },
+    {
+      "idx": 36,
+      "t": "2025-04-08T21:12",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "她说刘医生名字好听，心情好些了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "那就抓住这个安心点。明天你别提会不会疼，越提越紧张。"
+        }
+      ]
+    },
+    {
+      "idx": 37,
+      "t": "2025-04-09T00:19",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "社区中心电话我存了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "存得好。如果路上耽误五分钟，提前打过去说明。"
+        }
+      ]
+    },
+    {
+      "idx": 38,
+      "t": "2025-04-09T03:26",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我把地图路线截屏了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以，明早别再搜索相似口腔名字。直接看截屏。"
+        }
+      ]
+    },
+    {
+      "idx": 39,
+      "t": "2025-04-09T06:33",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "瑞齿优惠券又震了一下，我关通知了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "关得好。今晚让外婆早点睡。"
+        }
+      ],
+      "tags": [
+        "distractor:old_notification"
+      ]
+    },
+    {
+      "idx": 40,
+      "t": "2025-04-09T09:40",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "透明袋、薄毯、轮椅都在门口。"
+        },
+        {
+          "speaker": "user2",
+          "text": "再把灰色运动鞋放旁边，免得她穿错皮鞋。"
+        }
+      ]
+    },
+    {
+      "idx": 41,
+      "t": "2025-04-09T12:47",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我怕她明早又问是不是洗牙。"
+        },
+        {
+          "speaker": "user2",
+          "text": "你就用一句话解释：不是洗牙，是让假牙别磨。"
+        }
+      ]
+    },
+    {
+      "idx": 42,
+      "t": "2025-04-09T15:54",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "早餐后要不要刷牙再去？"
+        },
+        {
+          "speaker": "user2",
+          "text": "简单漱口就行，别折腾太久。医生会处理口内情况。"
+        }
+      ]
+    },
+    {
+      "idx": 43,
+      "t": "2025-04-09T18:11",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我最后确认一下：明天带外婆去哪里、找谁、几点、做什么？"
+        },
+        {
+          "speaker": "user2",
+          "text": "这样确认最好，几个口腔名字和项目都挺像。"
+        }
+      ],
+      "tags": [
+        "query"
+      ]
+    }
+  ],
+  "evals": [
+    {
+      "query_turn": 43,
+      "type": "semantic_distractor",
+      "positive_turns": [
+        6
+      ],
+      "negative_turns": [
+        0,
+        21
+      ],
+      "pairs": [
+        {
+          "positive": 6,
+          "negative": 0
+        },
+        {
+          "positive": 6,
+          "negative": 21
+        }
+      ],
+      "top_k": [
+        1,
+        3,
+        5
+      ]
+    }
+  ]
+}

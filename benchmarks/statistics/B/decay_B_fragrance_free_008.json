@@ -1,0 +1,713 @@
+{
+  "scenario_id": "decay_B_fragrance_free_008",
+  "category": "decay_forget",
+  "description": "敏感皮用户长期默认使用无香保湿乳和简单温和护理，中间因旅行、婚礼、直播种草和体验券短暂尝试香氛精华、防晒喷雾、酸类焕肤等，最后询问浴室默认保留的脸部护理。",
+  "persona": "user1 和 user2 是一起生活的情侣，user2 皮肤敏感，user1 常帮忙整理浴室、补货、安排旅行和日常采购。",
+  "turns": [
+    {
+      "idx": 0,
+      "t": "2026-02-18T21:10:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你脸颊这两天又有点干，我今晚帮你把洗手台上的护肤品整理一下？"
+        },
+        {
+          "speaker": "user2",
+          "text": "好，常用的还是放那瓶无香保湿乳和温和洁面，我长期不太能折腾香味和强功效。"
+        }
+      ],
+      "tags": [
+        "stable:fragrance_free_moisturizer"
+      ]
+    },
+    {
+      "idx": 1,
+      "t": "2026-02-19T05:10:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "快递到了两包猫砂，我先放阳台门口，别挡着你晾衣服。"
+        },
+        {
+          "speaker": "user2",
+          "text": "行，晚上我再搬进去，袋子太重别让你一个人拎。"
+        }
+      ]
+    },
+    {
+      "idx": 2,
+      "t": "2026-02-19T18:27:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "品牌试用装里有一瓶玫瑰精华，你昨晚说味道很治愈，要不要继续买正装？"
+        },
+        {
+          "speaker": "user2",
+          "text": "那只是开箱时觉得新鲜，玫瑰香对我脸和鼻子都不稳定，别当长期选择。"
+        }
+      ],
+      "tags": [
+        "distractor:rose_serum"
+      ]
+    },
+    {
+      "idx": 3,
+      "t": "2026-02-20T13:01:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天早上你鼻子是不是被玫瑰味刺激到了，我听你打了好几个喷嚏。"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，所以我还是适合无香、成分简单的保湿乳，临时试香氛精华容易翻车。"
+        }
+      ],
+      "tags": [
+        "stable:fragrance_free_moisturizer"
+      ]
+    },
+    {
+      "idx": 4,
+      "t": "2026-02-21T12:09:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你同事约周五下班去吃椰子鸡，我看那家排队挺久，要不要提前取号？"
+        },
+        {
+          "speaker": "user2",
+          "text": "取吧，周五我应该能准点走，别订太晚，第二天还要早起。"
+        }
+      ]
+    },
+    {
+      "idx": 5,
+      "t": "2026-02-22T16:34:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "海边旅行前你买了高倍防晒喷雾，说喷起来很方便，我要不要给你囤两瓶？"
+        },
+        {
+          "speaker": "user2",
+          "text": "旅行可以用喷雾补涂，但日常脸上别默认喷香味防晒，我还是用温和无香乳霜型。"
+        }
+      ],
+      "tags": [
+        "distractor:sunscreen_spray"
+      ]
+    },
+    {
+      "idx": 6,
+      "t": "2026-02-23T01:16:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你回来后额头没晒红，看来那瓶防晒喷雾还挺管用。"
+        },
+        {
+          "speaker": "user2",
+          "text": "海边风大用它方便，但平时护肤默认还是简单保湿加温和防晒，不搞太多新花样。"
+        }
+      ],
+      "tags": [
+        "stable:simple_routine"
+      ]
+    },
+    {
+      "idx": 7,
+      "t": "2026-02-23T14:32:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "楼下干洗店换老板了，上次那件西装要不要先别送过去？"
+        },
+        {
+          "speaker": "user2",
+          "text": "先别送，我问问同事有没有靠谱店，别把扣子洗坏了。"
+        }
+      ]
+    },
+    {
+      "idx": 8,
+      "t": "2026-02-24T09:05:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "美容院送了一张酸类焕肤体验券，说闭口会改善得快。"
+        },
+        {
+          "speaker": "user2",
+          "text": "这次如果皮肤稳定可以试一次，但酸类不是我长期默认护理，太刺激我会泛红。"
+        }
+      ],
+      "tags": [
+        "distractor:acid_peel"
+      ]
+    },
+    {
+      "idx": 9,
+      "t": "2026-02-25T08:12:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你做完体验后皮肤看着亮了，但脸颊红了半天，我有点担心。"
+        },
+        {
+          "speaker": "user2",
+          "text": "所以我不想把它常态化，我长期最稳的是无香保湿乳，先把屏障养住。"
+        }
+      ],
+      "tags": [
+        "stable:fragrance_free_moisturizer"
+      ]
+    },
+    {
+      "idx": 10,
+      "t": "2026-02-26T12:36:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你妈寄来的枇杷到了，我放冰箱上层，晚上吃之前记得洗。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好，别一次吃太多，枇杷甜，晚上吃多了嗓子反而黏。"
+        }
+      ]
+    },
+    {
+      "idx": 11,
+      "t": "2026-02-26T21:17:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "朋友送你一罐睡眠面膜，说厚涂一晚第二天会很嫩。"
+        },
+        {
+          "speaker": "user2",
+          "text": "偶尔熬夜救急可以用，但我不喜欢黏一整晚，默认还是薄涂无香保湿乳。"
+        }
+      ],
+      "tags": [
+        "distractor:sleeping_mask"
+      ]
+    },
+    {
+      "idx": 12,
+      "t": "2026-02-27T10:32:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你昨天熬夜改图，今早皮肤确实没那么紧绷，是面膜有用吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "有点用，但那是特殊情况救急，长期每天用我会闷，还是简单保湿更安心。"
+        }
+      ],
+      "tags": [
+        "stable:simple_moisturizer"
+      ]
+    },
+    {
+      "idx": 13,
+      "t": "2026-02-28T05:04:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "物业说电梯周六检修，十点到十二点只能走楼梯，我们买菜要错开。"
+        },
+        {
+          "speaker": "user2",
+          "text": "那就九点半前出门，买重的东西让配送员下午送。"
+        }
+      ]
+    },
+    {
+      "idx": 14,
+      "t": "2026-03-01T04:10:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你看直播时夸那个含亮片的身体乳很漂亮，节日聚会要不要买？"
+        },
+        {
+          "speaker": "user2",
+          "text": "聚会露肩可以临时用一点，但平时我不默认用带香带闪的东西，皮肤会痒。"
+        }
+      ],
+      "tags": [
+        "distractor:shimmer_lotion"
+      ]
+    },
+    {
+      "idx": 15,
+      "t": "2026-03-02T08:33:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我把洗手台上那些小样收进盒子了，免得你每天看见都想试。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好，留下常用无香保湿乳和温和洁面就够，我越少折腾越稳定。"
+        }
+      ],
+      "tags": [
+        "stable:fragrance_free_moisturizer"
+      ]
+    },
+    {
+      "idx": 16,
+      "t": "2026-03-02T17:13:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你们部门换了新工牌绳，我看材质有点硬，脖子会不会磨？"
+        },
+        {
+          "speaker": "user2",
+          "text": "会，我明天换回自己的软绳，硬边磨一整天皮肤肯定红。"
+        }
+      ]
+    },
+    {
+      "idx": 17,
+      "t": "2026-03-03T06:27:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "同事推荐修护精华，说有药味但退红很快，你要不要买来备着？"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以备小样观察，但默认别换它，功能越强我越要慢慢试。"
+        }
+      ],
+      "tags": [
+        "distractor:repair_serum_sample"
+      ]
+    },
+    {
+      "idx": 18,
+      "t": "2026-03-04T00:58:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你这几天没乱试东西，脸颊确实安静很多。"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，我长期就是适合低刺激、无香、保湿为主，别被新品节奏带着走。"
+        }
+      ],
+      "tags": [
+        "stable:fragrance_free_moisturizer"
+      ]
+    },
+    {
+      "idx": 19,
+      "t": "2026-03-05T00:03:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "周末婚礼在户外草坪，你要不要我带驱蚊液和遮阳伞？"
+        },
+        {
+          "speaker": "user2",
+          "text": "要，驱蚊液喷衣服上就行，别直接喷脸，遮阳伞很重要。"
+        }
+      ]
+    },
+    {
+      "idx": 20,
+      "t": "2026-03-06T04:25:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "婚礼化妆师给你上了很香的妆前乳，你说当时挺服帖。"
+        },
+        {
+          "speaker": "user2",
+          "text": "婚礼那天妆前乳是为了上镜，不能代表日常，我平时脸上还是无香保湿乳最稳。"
+        }
+      ],
+      "tags": [
+        "distractor:scented_primer"
+      ]
+    },
+    {
+      "idx": 21,
+      "t": "2026-03-06T13:04:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "卸妆后你赶紧敷了舒缓喷雾，是不是香味妆前乳让脸不舒服？"
+        },
+        {
+          "speaker": "user2",
+          "text": "有一点，回家后我还是靠无香保湿乳压住干痒，不想连续用香味产品。"
+        }
+      ],
+      "tags": [
+        "stable:fragrance_free_moisturizer"
+      ]
+    },
+    {
+      "idx": 22,
+      "t": "2026-03-07T02:17:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你爸说想换手机，我周末陪他去店里看，可能要花半天。"
+        },
+        {
+          "speaker": "user2",
+          "text": "陪他吧，记得让店员把通讯录和微信都迁好，他自己弄会急。"
+        }
+      ]
+    },
+    {
+      "idx": 23,
+      "t": "2026-03-07T20:47:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "药妆店活动买二送一，你盯着那款茶树控油水看了很久。"
+        },
+        {
+          "speaker": "user2",
+          "text": "夏天鼻翼出油时可以偶尔擦，但全脸长期默认控油水不适合我，会干。"
+        }
+      ],
+      "tags": [
+        "distractor:tea_tree_toner"
+      ]
+    },
+    {
+      "idx": 24,
+      "t": "2026-03-08T19:51:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我给你补货时看到同品牌出了香草味版本，评价很多。"
+        },
+        {
+          "speaker": "user2",
+          "text": "别买香草味，还是无香版保湿乳，我对香味太看状态了。"
+        }
+      ],
+      "tags": [
+        "stable:fragrance_free_moisturizer"
+      ]
+    },
+    {
+      "idx": 25,
+      "t": "2026-03-10T00:12:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天晚饭想吃清蒸鱼还是番茄牛腩，冰箱里两样材料都有。"
+        },
+        {
+          "speaker": "user2",
+          "text": "清蒸鱼吧，最近口腔溃疡，番茄太酸可能疼。"
+        }
+      ]
+    },
+    {
+      "idx": 26,
+      "t": "2026-03-10T08:50:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你出差那几天只带了旅行装洁面和保湿乳，没有带精华，够用吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "够用，我长期出门也尽量精简，温和洁面加无香保湿乳就能撑住。"
+        }
+      ],
+      "tags": [
+        "stable:simple_routine"
+      ]
+    },
+    {
+      "idx": 27,
+      "t": "2026-03-10T22:02:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "酒店送的薰衣草身体乳闻起来挺舒服，你回来还带了半瓶。"
+        },
+        {
+          "speaker": "user2",
+          "text": "闻着舒服不等于适合天天用，带回来当手霜偶尔抹，不放到脸部日常里。"
+        }
+      ],
+      "tags": [
+        "distractor:lavender_lotion"
+      ]
+    },
+    {
+      "idx": 28,
+      "t": "2026-03-11T16:31:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你最近又开始跑步，晚上洗完脸会不会更干？"
+        },
+        {
+          "speaker": "user2",
+          "text": "会，所以我会厚一点涂无香保湿乳，别叠太多活性成分。"
+        }
+      ],
+      "tags": [
+        "stable:fragrance_free_moisturizer"
+      ]
+    },
+    {
+      "idx": 29,
+      "t": "2026-03-12T15:34:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "邻居群在拼购樱桃，我看价格不错，要不要跟一箱？"
+        },
+        {
+          "speaker": "user2",
+          "text": "跟半箱吧，一整箱我们吃不完，坏了太可惜。"
+        }
+      ]
+    },
+    {
+      "idx": 30,
+      "t": "2026-03-13T19:54:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你朋友说她用了美白安瓶很惊艳，你听完有点心动。"
+        },
+        {
+          "speaker": "user2",
+          "text": "心动归心动，我这种敏感皮不能默认上安瓶，长期还是稳住保湿和防晒。"
+        }
+      ],
+      "tags": [
+        "distractor:whitening_ampoule"
+      ]
+    },
+    {
+      "idx": 31,
+      "t": "2026-03-14T04:31:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我发现你买护肤品最怕复杂套装，送一堆步骤反而让你烦。"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，我长期默认就要少步骤、无香、保湿优先，复杂套装最后都闲置。"
+        }
+      ],
+      "tags": [
+        "stable:simple_routine"
+      ]
+    },
+    {
+      "idx": 32,
+      "t": "2026-03-14T17:42:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "明天公司拍证件照，你要不要临时用一点提亮隔离？"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以薄涂一次，拍照需要气色，但晚上卸掉后还是回到简单保湿。"
+        }
+      ],
+      "tags": [
+        "distractor:brightening_base"
+      ]
+    },
+    {
+      "idx": 33,
+      "t": "2026-03-15T12:10:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "拍完照你说隔离挺自然，要不要以后上班也用？"
+        },
+        {
+          "speaker": "user2",
+          "text": "不用，日常上班不想增加负担，我稳定选择还是无香保湿乳加温和防晒。"
+        }
+      ],
+      "tags": [
+        "stable:simple_routine"
+      ]
+    },
+    {
+      "idx": 34,
+      "t": "2026-03-16T11:12:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "洗衣机排水管又松了，我已经拍视频给维修师傅，他说明晚来。"
+        },
+        {
+          "speaker": "user2",
+          "text": "让他七点后来吧，六点半我还在路上，别让你一个人解释。"
+        }
+      ]
+    },
+    {
+      "idx": 35,
+      "t": "2026-03-17T15:31:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你这半年真正回购的好像一直是同一瓶保湿乳。"
+        },
+        {
+          "speaker": "user2",
+          "text": "是，那瓶无香、厚薄刚好、不会熏鼻子，是我长期最稳的脸部护理选择。"
+        }
+      ],
+      "tags": [
+        "stable:fragrance_free_moisturizer"
+      ]
+    },
+    {
+      "idx": 36,
+      "t": "2026-03-18T00:07:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "618 购物车里有很多新品套装，我要不要帮你凑满减？"
+        },
+        {
+          "speaker": "user2",
+          "text": "别为了满减乱凑，常用品够用就先别买，浴室已经快放不下了。"
+        }
+      ]
+    },
+    {
+      "idx": 37,
+      "t": "2026-03-18T13:17:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "朋友生日趴是荧光主题，她说可以借你带闪粉的身体乳。"
+        },
+        {
+          "speaker": "user2",
+          "text": "借她没问题，我自己那天如果用也是一点点，别把闪粉当日常。"
+        }
+      ],
+      "tags": [
+        "distractor:shimmer_lotion"
+      ]
+    },
+    {
+      "idx": 38,
+      "t": "2026-03-19T07:44:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我们明天去郊外摘杨梅，我带防晒帽、湿巾和一小包常用物品，别让包太重。"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以，别带太多瓶瓶罐罐，路上热，东西越少越好看管。"
+        }
+      ]
+    },
+    {
+      "idx": 39,
+      "t": "2026-03-20T06:45:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "回来路上你一直说脸有点热，我怕是不是晒到了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "可能晒久了，今晚就别再加任何新东西，先让它安静下来。"
+        }
+      ]
+    },
+    {
+      "idx": 40,
+      "t": "2026-03-20T16:08:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "明晚维修师傅如果提前到，我先让他在楼下等一会儿，别直接进门。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好，你先确认身份和工单号，我到家再一起看排水管。"
+        }
+      ]
+    },
+    {
+      "idx": 41,
+      "t": "2026-03-21T00:25:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我在整理浴室置物架，想把默认留在外面的脸部护理放少一点，按你长期稳定习惯应该留什么？"
+        },
+        {
+          "speaker": "user2",
+          "text": "按我最不容易出问题的那套留就行。"
+        }
+      ]
+    }
+  ],
+  "evals": [
+    {
+      "query_turn": 41,
+      "type": "decay_forget",
+      "positive_turns": [
+        0,
+        15,
+        18,
+        31,
+        35
+      ],
+      "negative_turns": [
+        2,
+        8,
+        20,
+        30,
+        37
+      ],
+      "pairs": [
+        {
+          "positive": 35,
+          "negative": 37
+        },
+        {
+          "positive": 31,
+          "negative": 30
+        },
+        {
+          "positive": 18,
+          "negative": 20
+        }
+      ],
+      "top_k": [
+        1,
+        3,
+        5
+      ]
+    }
+  ]
+}

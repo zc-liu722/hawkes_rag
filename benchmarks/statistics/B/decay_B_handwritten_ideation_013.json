@@ -1,0 +1,773 @@
+{
+  "scenario_id": "decay_B_handwritten_ideation_013",
+  "category": "decay_forget",
+  "description": "策划人长期偏好钢笔加方格本做个人构思，中间因团队会议、散步、协作、课程和工具试用短暂使用白板、语音、平板、共享文档、卡片等，最后询问项目开头默认准备什么工具。",
+  "persona": "user1 和 user2 是同住伴侣，user2 做品牌策划，user1 常帮她准备包、整理书桌和同步客户材料。",
+  "turns": [
+    {
+      "idx": 0,
+      "t": "2025-02-18T21:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我看你又拿出那本黑色方格本，今天构思提案还是先手写吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，我长期想清楚东西最靠钢笔和方格本，先慢慢写出来，屏幕太容易跳走。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 1,
+      "t": "2025-02-19T07:09",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你电脑就在旁边，为什么不直接开文档列大纲？"
+        },
+        {
+          "speaker": "user2",
+          "text": "正式写会开文档，但发散阶段我还是要手写，划掉和箭头都更自然。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 2,
+      "t": "2025-02-19T17:18",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天会议室有整面白板，要不要直接在白板上画方案？"
+        },
+        {
+          "speaker": "user2",
+          "text": "今天大家都在场，可以白板共创，但那是集体讨论，不是我个人默认构思方式。"
+        }
+      ],
+      "tags": [
+        "negative:whiteboard"
+      ]
+    },
+    {
+      "idx": 3,
+      "t": "2025-02-20T03:27",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "白板照片我发你了，你要不要当最终思路保存？"
+        },
+        {
+          "speaker": "user2",
+          "text": "照片留着参考就行，回家我还是会把关键点抄回方格本。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 4,
+      "t": "2025-02-20T13:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你朋友推荐语音转文字，说散步时把想法说出来更快。"
+        },
+        {
+          "speaker": "user2",
+          "text": "散步那次可以试，突然有灵感就录一下，但长期构思我不适合靠说话。"
+        }
+      ],
+      "tags": [
+        "negative:voice_dictation"
+      ]
+    },
+    {
+      "idx": 5,
+      "t": "2025-02-20T23:09",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "昨天那段语音转出来好多错字，你看了吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "看了，整理起来比手写还费劲，我还是喜欢自己一笔一笔压住思路。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 6,
+      "t": "2025-02-21T09:18",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "这支钢笔是不是漏墨，我看到笔帽里有一点蓝色。"
+        },
+        {
+          "speaker": "user2",
+          "text": "有点，但写起来顺，我清一下就好，方格本配钢笔还是我的固定组合。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 7,
+      "t": "2025-02-21T19:27",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "平板笔记软件今天半价，带无限画布，看着很高级。"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以买来试模板，但别指望我长期在平板上想问题，玻璃屏让我没有阻力感。"
+        }
+      ],
+      "tags": [
+        "negative:tablet_app"
+      ]
+    },
+    {
+      "idx": 8,
+      "t": "2025-02-22T05:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你昨晚试平板画了两页，今天继续吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "不继续了，功能多但我老去调笔刷，纸本反而让我少折腾。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 9,
+      "t": "2025-02-22T15:09",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "明天坐高铁两个小时，你要不要只带手机记灵感？"
+        },
+        {
+          "speaker": "user2",
+          "text": "手机可以临时记一句话，但真正展开还得回到方格本，键盘太碎。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 10,
+      "t": "2025-02-23T01:18",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "办公室发了一盒彩色便利贴，你看起来挺开心。"
+        },
+        {
+          "speaker": "user2",
+          "text": "便利贴适合排序和贴墙，今天做卡片很好玩，但长期想深一点还是本子。"
+        }
+      ],
+      "tags": [
+        "negative:sticky_cards"
+      ]
+    },
+    {
+      "idx": 11,
+      "t": "2025-02-23T11:27",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "便利贴墙拍完照我帮你收进信封了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好，别让它们散得到处都是，最终脉络我会写回本子。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 12,
+      "t": "2025-02-23T21:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你今天咖啡洒了一点在本子边上，会不会心疼？"
+        },
+        {
+          "speaker": "user2",
+          "text": "有点，但纸本有痕迹也没关系，反而知道那天在想什么。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 13,
+      "t": "2025-02-24T07:09",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "客户临时要线上协作，大家都在共享文档里同步打字。"
+        },
+        {
+          "speaker": "user2",
+          "text": "那种同步修改必须用共享文档，个人前期构思不是一个场景。"
+        }
+      ],
+      "tags": [
+        "negative:shared_doc"
+      ]
+    },
+    {
+      "idx": 14,
+      "t": "2025-02-24T17:18",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "共享文档里评论太多，你后来是不是还是回本子了？"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，我需要先安静写出自己的判断，再把成熟内容搬到文档。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 15,
+      "t": "2025-02-25T03:27",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我给你买了新的 0.5 中性笔，要不要替代钢笔？"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以备用，但我长期喜欢钢笔出墨的阻尼，写慢一点脑子也慢下来。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 16,
+      "t": "2025-02-25T13:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "上课老师让大家用思维导图软件，你作业也得交电子版。"
+        },
+        {
+          "speaker": "user2",
+          "text": "作业可以按要求用软件交，私下构思我不会默认打开导图软件。"
+        }
+      ],
+      "tags": [
+        "negative:mindmap_software"
+      ]
+    },
+    {
+      "idx": 17,
+      "t": "2025-02-25T23:09",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "导图交上去后你把源文件放哪了？"
+        },
+        {
+          "speaker": "user2",
+          "text": "云盘里，等有用再看。核心推理我已经写在方格本那两页。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 18,
+      "t": "2025-02-26T09:18",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天你翻旧本子找三个月前的标题，居然一下找到了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "纸本按时间排很直观，我看到那页墨迹和折角就想起当时背景。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 19,
+      "t": "2025-02-26T19:27",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "录播课程的讲师建议用卡片盒管理知识，你心动吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "心动，可以试一阵卡片盒，但别把它当我默认构思工具，维护成本高。"
+        }
+      ],
+      "tags": [
+        "negative:zettelkasten_trial"
+      ]
+    },
+    {
+      "idx": 20,
+      "t": "2025-02-27T05:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "卡片盒你贴了标签，看起来像小图书馆。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好看是好看，真正赶方案时我还是会抓方格本，不会先找盒子。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 21,
+      "t": "2025-02-27T15:09",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "这周你写了好几页草稿，我怕本子快用完。"
+        },
+        {
+          "speaker": "user2",
+          "text": "快用完就买同规格，纸张别太滑，我已经适应这个格子密度。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 22,
+      "t": "2025-02-28T01:18",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天出门忘带本子，你在餐巾纸上写了几行。"
+        },
+        {
+          "speaker": "user2",
+          "text": "那是临时救急，回家我会誊到本子里，不然碎纸一定丢。"
+        }
+      ],
+      "tags": [
+        "negative:napkin_note"
+      ]
+    },
+    {
+      "idx": 23,
+      "t": "2025-02-28T11:27",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "餐巾纸那几行我夹在本子最后一页了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "谢谢，等我整理时会重写一遍，临时纸条不能当长期系统。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 24,
+      "t": "2025-02-28T21:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你用红笔圈了三个词，是不是比电子高亮清楚？"
+        },
+        {
+          "speaker": "user2",
+          "text": "对，手写圈出来我会记得当时为什么犹豫，电子高亮太轻了。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 25,
+      "t": "2025-03-01T07:09",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "公司培训发了模板 PPT，让大家直接在模板里想结构。"
+        },
+        {
+          "speaker": "user2",
+          "text": "交付阶段可以套模板，构思阶段直接进 PPT 会让我只想排版。"
+        }
+      ],
+      "tags": [
+        "negative:ppt_template"
+      ]
+    },
+    {
+      "idx": 26,
+      "t": "2025-03-01T17:18",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "模板 PPT 那页你改了很多，看起来快成稿了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "是成稿工具，不是起点。最早那几条判断还是从本子里来的。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 27,
+      "t": "2025-03-02T03:27",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "明天去客户现场，你包里还要带那本厚本子吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "要带，哪怕重一点，现场听到信息我能立刻写在同一处。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 28,
+      "t": "2025-03-02T13:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "朋友送你一套索引卡，说很多作家都这么写。"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以试几张做引用卡，但我个人长期不想把思路拆得太散。"
+        }
+      ],
+      "tags": [
+        "negative:index_cards"
+      ]
+    },
+    {
+      "idx": 29,
+      "t": "2025-03-02T23:09",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "索引卡现在夹在本子封底，你觉得这样合适吗？"
+        },
+        {
+          "speaker": "user2",
+          "text": "合适，卡片当附件，本子还是主线，这样我不会丢上下文。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 30,
+      "t": "2025-03-03T09:18",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你最近的字比以前整齐，是不是钢笔练出来的？"
+        },
+        {
+          "speaker": "user2",
+          "text": "可能吧，关键是手写让我慢下来，想法没那么急着变成口号。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 31,
+      "t": "2025-03-03T19:27",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今天咖啡馆桌子太小，你只带手机会不会轻松点？"
+        },
+        {
+          "speaker": "user2",
+          "text": "小桌子也能放本子，我宁愿少点一盘甜点，也想把纸摊开。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 32,
+      "t": "2025-03-04T05:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "有人推荐可擦写智能笔，写纸上还能同步到云端。"
+        },
+        {
+          "speaker": "user2",
+          "text": "听着有趣，可以体验一次，但长期别让我依赖同步硬件，坏了更烦。"
+        }
+      ],
+      "tags": [
+        "negative:smart_pen"
+      ]
+    },
+    {
+      "idx": 33,
+      "t": "2025-03-04T15:09",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "智能笔试完要不要留下，我看识别率还行。"
+        },
+        {
+          "speaker": "user2",
+          "text": "先不留，识别率不是问题，我是不想构思时惦记设备电量。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 34,
+      "t": "2025-03-05T01:18",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你把旧本子按年份排到书架上了，像一整排小档案。"
+        },
+        {
+          "speaker": "user2",
+          "text": "这样找得到，我长期的想法脉络都在这些本子里，比散文件安心。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 35,
+      "t": "2025-03-05T11:27",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "如果下次买不到同款方格本，要换横线还是空白？"
+        },
+        {
+          "speaker": "user2",
+          "text": "横线可以，关键是纸别洇墨，大小能摊在咖啡馆小桌上。"
+        }
+      ],
+      "tags": [
+        "stable:notebook"
+      ]
+    },
+    {
+      "idx": 36,
+      "t": "2025-03-05T21:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今晚我们要去看电影，票我已经取好了。"
+        },
+        {
+          "speaker": "user2",
+          "text": "好，我先把包放下，电影结束再想工作的事。"
+        }
+      ],
+      "tags": [
+        "neutral:movie"
+      ]
+    },
+    {
+      "idx": 37,
+      "t": "2025-03-06T07:09",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "明天阿姨来打扫，我把书桌上水杯收走。"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以，但本子和钢笔别放太远，我回来还要整理今天的票根。"
+        }
+      ],
+      "tags": [
+        "neutral:cleaning"
+      ]
+    },
+    {
+      "idx": 38,
+      "t": "2025-03-06T17:18",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你快递到了两本小说，我放在鞋柜上。"
+        },
+        {
+          "speaker": "user2",
+          "text": "谢谢，周末我再拆，今晚先把衣服洗了。"
+        }
+      ],
+      "tags": [
+        "neutral:parcel"
+      ]
+    },
+    {
+      "idx": 39,
+      "t": "2025-03-07T03:27",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "今晚垃圾分类点提前关闭，我把纸箱先压在门后。"
+        },
+        {
+          "speaker": "user2",
+          "text": "可以，明早出门再带下去，别挡住书房门就行。"
+        }
+      ],
+      "tags": [
+        "neutral:recycling"
+      ]
+    },
+    {
+      "idx": 40,
+      "t": "2025-03-07T13:00",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "你明天午饭想带便当还是在楼下吃？"
+        },
+        {
+          "speaker": "user2",
+          "text": "楼下吃吧，明天上午会很满，我不想早起做菜。"
+        }
+      ],
+      "tags": [
+        "neutral:lunch"
+      ]
+    },
+    {
+      "idx": 41,
+      "t": "2025-03-07T23:09",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "咖啡店今天人太多，我在窗边坐了十分钟就被旁边电话声吵到头疼。"
+        },
+        {
+          "speaker": "user2",
+          "text": "那你下午换个安静角落写，别为了环境好看影响真正思考。"
+        }
+      ]
+    },
+    {
+      "idx": 42,
+      "t": "2025-03-08T09:18",
+      "messages": [
+        {
+          "speaker": "user1",
+          "text": "我准备给你下次项目开头的工具包，按你长期构思习惯默认放什么？"
+        },
+        {
+          "speaker": "user2",
+          "text": "按我最能沉下来的那套放就好，不用按那些临时尝试。"
+        }
+      ],
+      "tags": [
+        "query"
+      ]
+    }
+  ],
+  "evals": [
+    {
+      "query_turn": 42,
+      "type": "decay_forget",
+      "positive_turns": [
+        0,
+        14,
+        25,
+        34
+      ],
+      "negative_turns": [
+        19,
+        22,
+        28,
+        32
+      ],
+      "pairs": [
+        {
+          "positive": 14,
+          "negative": 22
+        },
+        {
+          "positive": 25,
+          "negative": 28
+        },
+        {
+          "positive": 34,
+          "negative": 32
+        }
+      ],
+      "top_k": [
+        1,
+        3,
+        5
+      ]
+    }
+  ]
+}

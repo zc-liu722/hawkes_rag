@@ -1,0 +1,7 @@
+.DS_Store
+.venv/
+.mplconfig/
+__pycache__/
+*.py[cod]
+benchmarks/statistics/.generation_tmp*/
+benchmarks/statistics/.min_test_topics.json
