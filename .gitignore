@@ -3,8 +3,15 @@
 .mplconfig/
 __pycache__/
 *.py[cod]
-benchmarks/statistics/.generation_tmp*/
-benchmarks/statistics/.min_test_topics.json
+benchmarks/
+outputs/
+reports/
+thesis/
+
+# Repo ships one top-level README; keep other markdown / notes locally.
+*.md
+!README.md
+
 models/
 .env
 .env.*
