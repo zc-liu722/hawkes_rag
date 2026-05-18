@@ -5,3 +5,7 @@ __pycache__/
 *.py[cod]
 benchmarks/statistics/.generation_tmp*/
 benchmarks/statistics/.min_test_topics.json
+models/
+.env
+.env.*
+!.env.example

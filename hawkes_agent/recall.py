@@ -8,6 +8,7 @@ from hawkes_agent.adoption import adopted_ids
 from hawkes_agent.config import AgentHarnessConfig
 from hawkes_agent.dynamics import reinforce_lambda, suppress_lambda
 from hawkes_agent.memory import InMemoryVectorStore, RetrievedSegment
+from hawkes_agent.rerank import Reranker, make_reranker
 
 
 class RecallMiddleware:
@@ -22,6 +23,10 @@ class RecallMiddleware:
         self.store = store
         self.embed_fn = embed_fn
         self.config = config
+        self.reranker: Reranker = make_reranker(
+            config.reranker_backend,
+            model_name=config.reranker_model,
+        )
 
     def write_turn(
         self,
@@ -80,6 +85,42 @@ class RecallMiddleware:
             threshold=None,
         )
 
+    def hot_cold_recall(
+        self,
+        query: str,
+        *,
+        now: float,
+        namespace: str,
+        threshold: float | None = None,
+    ) -> tuple[list[RetrievedSegment], float, dict[str, int]]:
+        return self.store.recall_hot_cold(
+            self.embed_fn(query),
+            now=now,
+            namespace=namespace,
+            dynamics=self.config.dynamics,
+            hot_top_k=self.config.dynamics.hot_top_k,
+            cold_top_k=self.config.dynamics.cold_top_k,
+            threshold=threshold,
+        )
+
+    def hot_cold_reranked_recall(
+        self,
+        query: str,
+        *,
+        now: float,
+        namespace: str,
+        threshold: float | None = None,
+    ) -> tuple[list[RetrievedSegment], float, dict[str, int | float | str | None]]:
+        return self.store.recall_hot_cold_reranked(
+            query,
+            self.embed_fn(query),
+            now=now,
+            namespace=namespace,
+            dynamics=self.config.dynamics,
+            reranker=self.reranker,
+            threshold=threshold,
+        )
+
     def score_adoption(
         self,
         answer: str,
@@ -98,7 +139,8 @@ class RecallMiddleware:
         for segment in segments:
             if segment.id not in adopted_set:
                 continue
-            lam_plus = reinforce_lambda(segment.lambda_minus_snapshot, segment.score)
+            activation_score = segment.hawkes_score or segment.score
+            lam_plus = reinforce_lambda(segment.lambda_minus_snapshot, activation_score)
             self.store.update_lambda(segment.id, lambda_plus=lam_plus, now=now)
 
     def suppress(
@@ -122,9 +164,17 @@ class RecallMiddleware:
         self,
         segments: list[RetrievedSegment],
         adopted: list[str],
+        adoption_scores: dict[str, float] | None = None,
     ) -> tuple[float, list[RetrievedSegment]]:
         adopted_set = set(adopted)
-        suspicious = [s for s in segments if s.id not in adopted_set]
+        adoption_scores = adoption_scores or {}
+        suspicious = [
+            s
+            for s in segments
+            if s.id not in adopted_set
+            and s.cos_at_recall >= self.config.dynamics.theta_c
+            and adoption_scores.get(s.id, 0.0) < self.config.dynamics.theta_a
+        ]
         if not suspicious:
             return 0.0, []
         suspicious.sort(key=lambda s: s.cos_at_recall, reverse=True)
