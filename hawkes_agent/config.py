@@ -30,14 +30,12 @@ class DynamicsConfig:
     hot_margin_threshold: float = 0.05
     hot_entropy_threshold: float = 0.90
     intermediate_top_k: int = 20
-    final_top_k: int = 20
+    final_top_k: int = 10
     hot_top_k: int = 3
     cold_top_k: int = 3
-    hot_candidate_k: int = 40
-    cold_candidate_k: int = 40
-    #: Cross-encoder budget: rerank only this many candidates by coarse ``score``
-    #: (hawkes/cos stage). ``<= 0`` means rerank all retrieved candidates.
-    rerank_top_k: int = 20
+    #: Optional cap on reranker batch size (hot pass only). ``<= 0`` reranks every
+    #: coarse hot hit (up to ``intermediate_top_k``; same cap as cold-merge budget).
+    rerank_top_k: int = 0
     min_hot_injected: int = 3
     hot_lambda_threshold: float = 0.10
     theta_a: float = 0.55
@@ -73,7 +71,7 @@ class AgentHarnessConfig:
     dynamics: DynamicsConfig = field(default_factory=DynamicsConfig)
     models: ModelRoutingConfig = field(default_factory=ModelRoutingConfig)
     adoption_method: str = "embedding"
-    reranker_backend: str = "qwen"
-    reranker_model: str | None = DEFAULT_QWEN_RERANKER_MODEL
+    reranker_backend: str = "off"
+    reranker_model: str | None = None
     enable_contradiction_micro: bool = False
     enable_dreaming: bool = False

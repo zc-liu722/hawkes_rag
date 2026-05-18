@@ -141,6 +141,26 @@ class InMemoryVectorStore:
             return np.ones_like(values, dtype=float) if hi > 0.0 else np.zeros_like(values, dtype=float)
         return (values - lo) / (hi - lo)
 
+    def _hybrid_scores_by_id(
+        self,
+        query: str,
+        records: list[MemoryRecord],
+        query_embedding: np.ndarray,
+        dynamics: DynamicsConfig,
+    ) -> dict[str, float]:
+        """Cosine+BM25 blend (same formula as the cold hybrid path), over ``records``."""
+        if not records:
+            return {}
+        q = normalize_vector(query_embedding)
+        matrix = np.vstack([r.embedding for r in records])
+        cosines = matrix @ q
+        bm25 = self._bm25_scores(query, records)
+        blended = (
+            dynamics.alpha * self._normalize_scores(cosines)
+            + (1.0 - dynamics.alpha) * self._normalize_scores(bm25)
+        )
+        return {r.id: float(blended[i]) for i, r in enumerate(records)}
+
     def decayed_lambdas(
         self,
         records: Iterable[MemoryRecord],
@@ -273,12 +293,13 @@ class InMemoryVectorStore:
             if lam < dynamics.hot_lambda_threshold
         ]
 
+        pool_k = max(0, dynamics.intermediate_top_k)
         hot_segments, mu = self._recall_from_records(
             hot_records,
             q,
             now=now,
             dynamics=dynamics,
-            top_k=dynamics.hot_candidate_k,
+            top_k=pool_k,
             use_lambda=True,
             threshold=-1.0,
             retrieval_pool="hot",
@@ -311,62 +332,110 @@ class InMemoryVectorStore:
         if self._query_asks_old_or_exact(query):
             trigger_reasons.append("explicit_old_or_exact_query")
 
-        cold_segments: list[RetrievedSegment] = []
-        if trigger_reasons:
-            cold_segments = self._cold_hybrid_candidates(
-                query=query,
-                records=cold_records or records,
-                query_embedding=q,
-                now=now,
-                dynamics=dynamics,
-                top_k=dynamics.cold_candidate_k,
-            )
-
-        merged: dict[str, RetrievedSegment] = {}
-        for segment in [*hot_ranked, *cold_segments]:
-            current = merged.get(segment.id)
-            if current is None:
-                merged[segment.id] = segment
-                continue
-            metadata = dict(current.metadata)
-            metadata["retrieval_pool"] = "both"
-            merged[segment.id] = RetrievedSegment(
-                id=current.id,
-                text=current.text,
-                score=max(current.score, segment.score),
-                cos_at_recall=max(current.cos_at_recall, segment.cos_at_recall),
-                lambda_minus_snapshot=max(
-                    current.lambda_minus_snapshot,
-                    segment.lambda_minus_snapshot,
-                ),
-                t_created=current.t_created,
-                t_last_event=current.t_last_event,
-                type_class=current.type_class,
-                namespace=current.namespace,
-                metadata=metadata,
-                retrieval_pool="both",
-                bm25_at_recall=max(current.bm25_at_recall, segment.bm25_at_recall),
-                hawkes_score=max(current.hawkes_score, segment.hawkes_score),
-                cold_candidate_score=max(current.cold_candidate_score, segment.cold_candidate_score),
-                rerank_score=0.0,
-            )
-        final_segments = list(merged.values())
-        final_segments.sort(key=lambda s: s.score, reverse=True)
-        if dynamics.rerank_top_k > 0:
-            final_segments = final_segments[: dynamics.rerank_top_k]
-        self._apply_rerank(query, final_segments, reranker)
-        final_segments.sort(key=lambda s: s.rerank_score, reverse=True)
-        final_segments = [s for s in final_segments if s.rerank_score >= cutoff]
-        final_segments = final_segments[: max(0, dynamics.intermediate_top_k)]
-        return final_segments, mu, {
-            "hot": len(hot_ranked),
-            "cold": len(cold_segments),
-            "cold_triggered": int(bool(trigger_reasons)),
-            "cold_trigger_reason": ",".join(trigger_reasons) if trigger_reasons else None,
+        meta_tail = {
             "hot_top1_score": float(hot_top1_rerank),
             "hot_top1_hawkes": float(hot_top1_hawkes),
             "hot_margin": float(hot_margin),
             "hot_score_entropy": float(hot_entropy),
+        }
+
+        if not trigger_reasons:
+            final_segments = [s for s in hot_ranked if s.rerank_score >= cutoff]
+            final_segments = final_segments[:pool_k]
+            return final_segments, mu, {
+                "hot": len(hot_ranked),
+                "cold": 0,
+                "cold_triggered": 0,
+                "cold_trigger_reason": None,
+                "hot_budget": pool_k,
+                "cold_budget": 0,
+                **meta_tail,
+            }
+
+        # Once cold retrieval is triggered, keep the total candidate budget
+        # aligned to intermediate_top_k: 1/4 hot + 3/4 cold.
+        hot_merge_k = max(1, pool_k // 4) if pool_k > 0 else 0
+        cold_merge_k = max(0, pool_k - hot_merge_k)
+        hot_top_coarse_for_merge = list(hot_segments[:hot_merge_k])
+        hybrid_by_id = self._hybrid_scores_by_id(query, records, q, dynamics)
+        cold_pool = cold_records if cold_records else records
+        cold_sorted = sorted(
+            cold_pool,
+            key=lambda r: hybrid_by_id[r.id],
+            reverse=True,
+        )
+        hot_merge_ids = {s.id for s in hot_top_coarse_for_merge}
+        cold_chosen: list[MemoryRecord] = []
+        for r in cold_sorted:
+            if r.id in hot_merge_ids:
+                continue
+            cold_chosen.append(r)
+            if len(cold_chosen) >= cold_merge_k:
+                break
+
+        idx = {r.id: i for i, r in enumerate(records)}
+        matrix = np.vstack([r.embedding for r in records])
+        cosines = matrix @ q
+        bm25_arr = self._bm25_scores(query, records)
+        lam_arr = self.decayed_lambdas(records, now=now, dynamics=dynamics)
+
+        merged_segments: list[RetrievedSegment] = []
+        for seg in hot_top_coarse_for_merge:
+            i = idx[seg.id]
+            h = hybrid_by_id[seg.id]
+            merged_segments.append(
+                RetrievedSegment(
+                    id=seg.id,
+                    text=seg.text,
+                    score=h,
+                    cos_at_recall=float(cosines[i]),
+                    lambda_minus_snapshot=float(lam_arr[i]),
+                    t_created=seg.t_created,
+                    t_last_event=seg.t_last_event,
+                    type_class=seg.type_class,
+                    namespace=seg.namespace,
+                    metadata=dict(seg.metadata),
+                    retrieval_pool="hot",
+                    bm25_at_recall=float(bm25_arr[i]),
+                    hawkes_score=seg.hawkes_score,
+                    cold_candidate_score=h,
+                    rerank_score=h,
+                )
+            )
+        for r in cold_chosen:
+            i = idx[r.id]
+            h = hybrid_by_id[r.id]
+            merged_segments.append(
+                RetrievedSegment(
+                    id=r.id,
+                    text=r.text,
+                    score=h,
+                    cos_at_recall=float(cosines[i]),
+                    lambda_minus_snapshot=float(lam_arr[i]),
+                    t_created=r.t_created,
+                    t_last_event=r.t_last_event,
+                    type_class=r.type_class,
+                    namespace=r.namespace,
+                    metadata=dict(r.metadata),
+                    retrieval_pool="cold",
+                    bm25_at_recall=float(bm25_arr[i]),
+                    hawkes_score=0.0,
+                    cold_candidate_score=h,
+                    rerank_score=h,
+                )
+            )
+
+        merged_segments.sort(key=lambda s: s.rerank_score, reverse=True)
+        final_segments = [s for s in merged_segments if s.rerank_score >= cutoff]
+        final_segments = final_segments[:pool_k]
+        return final_segments, mu, {
+            "hot": len(hot_top_coarse_for_merge),
+            "cold": len(cold_chosen),
+            "cold_triggered": 1,
+            "cold_trigger_reason": ",".join(trigger_reasons),
+            "hot_budget": hot_merge_k,
+            "cold_budget": cold_merge_k,
+            **meta_tail,
         }
 
     def _recall_from_records(

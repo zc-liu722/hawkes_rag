@@ -188,9 +188,11 @@ def _looks_like_unsupported_response_format(exc: Exception) -> bool:
         "response_format" in text
         and (
             "unsupported" in text
+            or "unavailable" in text
             or "not support" in text
             or "unknown parameter" in text
             or "unexpected keyword" in text
             or "invalid request" in text
+            or "invalid_request" in text
         )
     )

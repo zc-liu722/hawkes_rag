@@ -178,6 +178,7 @@ def make_embedding_fn(
     from sentence_transformers import SentenceTransformer
 
     model_name = {
+        "minilm": "sentence-transformers/all-MiniLM-L6-v2",
         # Qwen3-Embedding-0.6B: strong multilingual (incl. Chinese) retrieval; fits repeated sweeps.
         "qwen": "Qwen/Qwen3-Embedding-0.6B",
         "bge": "BAAI/bge-small-en-v1.5",

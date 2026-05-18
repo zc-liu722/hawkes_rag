@@ -39,6 +39,27 @@ class Reranker(Protocol):
 
 
 @dataclass
+class PassthroughReranker:
+    """Reranking disabled: reuse retrieval scores (hot = λ/Hawkes prior, unchanged order)."""
+
+    name: str = "off"
+
+    def score(
+        self,
+        query: str,
+        passages: list[str],
+        *,
+        priors: list[float] | None = None,
+    ) -> list[float]:
+        _ = query
+        if not passages:
+            return []
+        if priors is not None and len(priors) == len(passages):
+            return [float(p) for p in priors]
+        return [0.0 for _ in passages]
+
+
+@dataclass
 class HeuristicReranker:
     """Offline fallback for ablations when a Qwen reranker is unavailable.
 
@@ -94,15 +115,18 @@ class CrossEncoderReranker:
 
 
 def make_reranker(
-    backend: str = "heuristic",
+    backend: str = "off",
     *,
     model_name: str | None = None,
     device: str = "auto",
 ) -> Reranker:
-    if backend in {"heuristic", "none", ""}:
+    key = (backend or "").strip().lower()
+    if key in {"off", "disabled", "none", ""}:
+        return PassthroughReranker()
+    if key == "heuristic":
         return HeuristicReranker()
-    if backend in {"cross-encoder", "qwen"}:
-        if backend == "qwen" and not model_name:
+    if key in {"cross-encoder", "qwen"}:
+        if key == "qwen" and not model_name:
             model_name = DEFAULT_QWEN_RERANKER_MODEL
         if not model_name:
             raise ValueError("--reranker-model is required for cross-encoder/qwen reranking")

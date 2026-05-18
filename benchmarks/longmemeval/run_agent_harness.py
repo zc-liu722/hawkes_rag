@@ -35,7 +35,6 @@ if str(benchmarks_dir) not in sys.path:
     sys.path.insert(0, str(benchmarks_dir))
 
 from hawkes_agent import AgentHarnessConfig, DynamicsConfig, InMemoryVectorStore, ModelRoutingConfig, RecallMiddleware
-from hawkes_agent.config import DEFAULT_QWEN_RERANKER_MODEL
 from hawkes_rag.embeddings import make_embedding_fn
 from longmemeval.run_originidea_sessions import (
     Session,
@@ -91,6 +90,7 @@ def select_records(
     multi_only: bool,
     single_only: bool,
     question_types: set[str] | None,
+    question_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     if single_only:
         out = [r for r in records if is_single_session(r)]
@@ -100,13 +100,9 @@ def select_records(
         out = list(records)
     if question_types:
         out = [r for r in out if question_type(r) in question_types]
+    if question_ids:
+        out = [r for r in out if str(r.get("question_id") or "") in question_ids]
     return out[:n_questions]
-
-
-def session_type_class(_session: Session, default: str = "stable") -> str:
-    # The first paper harness keeps type classification controlled rather than
-    # inferred by an LLM. Datasets or ablations can override this later.
-    return default
 
 
 def replay_type_class(_turn: ReplayTurn, default: str = "stable") -> str:
@@ -183,7 +179,7 @@ def make_recall_middleware(
     embed_fn,
     dynamics: DynamicsConfig,
     adoption_method: str,
-    reranker_backend: str = "heuristic",
+    reranker_backend: str = "off",
     reranker_model: str | None = None,
     enable_contradiction_micro: bool = False,
 ) -> RecallMiddleware:
@@ -246,6 +242,7 @@ def compute_result(
     evidence_ids: set[str],
     final_top_k: int,
     replay_events: dict[str, int],
+    event_trace: list[dict[str, Any]] | None = None,
 ) -> HarnessResult:
     top_indices, top_ids = session_ids_from_rank(rank, sessions, final_top_k=final_top_k)
     gold_indices = {i for i, s in enumerate(sessions) if s.is_evidence}
@@ -260,6 +257,7 @@ def compute_result(
         session_recall_at_k=session_recall_at_k(top_ids, evidence_ids),
         session_metrics=metrics,
         replay_events=dict(replay_events),
+        event_trace=list(event_trace or []),
     )
 
 
@@ -470,76 +468,11 @@ def final_hot_cold_rank(
         dynamics=replace(
             middleware.config.dynamics,
             intermediate_top_k=middleware.config.dynamics.final_top_k,
-            hot_candidate_k=len(records),
-            cold_candidate_k=len(records),
         ),
         reranker=middleware.reranker,
         threshold=None,
     )
     return [int(s.metadata["sorted_pos"]) for s in segments], counts
-
-
-def run_hot_cold_rerank_harness(
-    *,
-    sessions: list[Session],
-    question: str,
-    question_time: float,
-    evidence_ids: set[str],
-    embed_fn,
-    dynamics: DynamicsConfig,
-    adoption_method: str,
-    namespace: str,
-    reranker_backend: str,
-    reranker_model: str | None,
-) -> HarnessResult:
-    middleware = make_recall_middleware(
-        embed_fn=embed_fn,
-        dynamics=dynamics,
-        adoption_method=adoption_method,
-        reranker_backend=reranker_backend,
-        reranker_model=reranker_model,
-    )
-    for sorted_pos, session in enumerate(sessions):
-        middleware.write_turn(
-            id=f"{namespace}:session:{sorted_pos}",
-            text=session.text,
-            now=session.time,
-            namespace=namespace,
-            type_class=session_type_class(session, dynamics.default_type_class),
-            metadata={
-                "session_id": session.session_id,
-                "session_index": session.session_index,
-                "sorted_pos": sorted_pos,
-                "is_evidence": session.is_evidence,
-            },
-        )
-    rank, counts = final_hot_cold_rank(
-        middleware,
-        question=question,
-        now=question_time,
-        namespace=namespace,
-    )
-    replay_events = {
-        "retrieved": 0,
-        "hot_retrieved": int(counts.get("hot", 0) or 0),
-        "cold_retrieved": int(counts.get("cold", 0) or 0),
-        "cold_triggered": int(counts.get("cold_triggered", 0) or 0),
-        "adopted": 0,
-        "written": len(sessions),
-        "contradiction_micro_calls": 0,
-        "dreaming_calls": 0,
-        "llm_calls": 0,
-        "final_hot_candidates": int(counts.get("hot", 0) or 0),
-        "final_cold_candidates": int(counts.get("cold", 0) or 0),
-    }
-    return compute_result(
-        rank=rank,
-        sessions=sessions,
-        evidence_ids=evidence_ids,
-        final_top_k=dynamics.final_top_k,
-        replay_events=replay_events,
-        event_trace=[],
-    )
 
 
 def run_full_agent_memory_harness(
@@ -671,8 +604,13 @@ def run_full_agent_memory_harness(
         now=question_time,
         namespace=namespace,
     )
+    replay_events["cold_triggered"] = int(replay_events.get("cold_triggered", 0)) + int(
+        final_counts.get("cold_triggered", 0) or 0
+    )
     replay_events["final_hot_candidates"] = final_counts.get("hot", 0)
     replay_events["final_cold_candidates"] = final_counts.get("cold", 0)
+    replay_events["final_hot_budget"] = final_counts.get("hot_budget", 0)
+    replay_events["final_cold_budget"] = final_counts.get("cold_budget", 0)
     return compute_result(
         rank=rank,
         sessions=sessions,
@@ -720,6 +658,29 @@ def half_life_days(beta: float) -> float:
     return float("inf") if beta <= 0.0 else float(np.log(2.0) / beta)
 
 
+def progress(message: str) -> None:
+    print(message, flush=True)
+
+
+def embed_texts_with_progress(embed_fn, texts: list[str], *, batch_size: int, label: str) -> np.ndarray:
+    batches: list[np.ndarray] = []
+    batch_size = max(1, int(batch_size))
+    total_batches = (len(texts) + batch_size - 1) // batch_size
+    for batch_idx, start in enumerate(range(0, len(texts), batch_size), start=1):
+        batch = texts[start : start + batch_size]
+        started = time.perf_counter()
+        progress(
+            f"[agent-harness] {label} embedding batch {batch_idx}/{total_batches} "
+            f"start size={len(batch)}"
+        )
+        batches.append(np.asarray(embed_texts(embed_fn, batch, batch_size=batch_size), dtype=float))
+        progress(
+            f"[agent-harness] {label} embedding batch {batch_idx}/{total_batches} "
+            f"done elapsed={time.perf_counter() - started:.2f}s"
+        )
+    return np.vstack(batches) if batches else np.zeros((0, 0), dtype=float)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the v3 agent memory paper harness.")
     parser.add_argument(
@@ -732,7 +693,7 @@ def main() -> None:
         type=Path,
         default=Path("outputs/longmemeval_agent_harness"),
     )
-    parser.add_argument("--embedding", choices=["qwen", "bge", "hashing"], default="qwen")
+    parser.add_argument("--embedding", choices=["minilm", "qwen", "bge", "hashing"], default="qwen")
     parser.add_argument("--device", default="auto")
     parser.add_argument("--model-cache-dir", type=Path, default=Path("benchmarks/longmemeval/cache/models"))
     parser.add_argument("--embedding-cache-dir", type=Path, default=Path("benchmarks/longmemeval/cache/embeddings"))
@@ -746,6 +707,24 @@ def main() -> None:
         default=None,
         help="Optional normalized question_type filters, e.g. knowledge_update temporal_reasoning.",
     )
+    parser.add_argument(
+        "--question-ids",
+        nargs="*",
+        default=None,
+        help="Optional exact LongMemEval question_id filters for small debug runs.",
+    )
+    parser.add_argument(
+        "--max-sessions",
+        type=int,
+        default=0,
+        help="Debug cap on expanded sessions for a selected question. <=0 keeps all sessions.",
+    )
+    parser.add_argument(
+        "--max-replay-turns",
+        type=int,
+        default=0,
+        help="Debug cap on expanded replay turns for a selected question. <=0 keeps all turns.",
+    )
     parser.add_argument("--beta-volatile", type=float, default=0.20)
     parser.add_argument("--beta-stable", type=float, default=0.05)
     parser.add_argument("--beta-identity", type=float, default=0.001)
@@ -758,17 +737,27 @@ def main() -> None:
     parser.add_argument("--hot-margin-threshold", type=float, default=0.05)
     parser.add_argument("--hot-entropy-threshold", type=float, default=0.90)
     parser.add_argument("--intermediate-top-k", type=int, default=20)
-    parser.add_argument("--final-top-k", type=int, default=20)
+    parser.add_argument("--final-top-k", type=int, default=10)
     parser.add_argument("--hot-top-k", type=int, default=3)
     parser.add_argument("--cold-top-k", type=int, default=3)
-    parser.add_argument("--hot-candidate-k", type=int, default=40)
-    parser.add_argument("--cold-candidate-k", type=int, default=40)
+    parser.add_argument(
+        "--hot-candidate-k",
+        type=int,
+        default=0,
+        help="Deprecated compatibility flag; budgets are derived from --intermediate-top-k.",
+    )
+    parser.add_argument(
+        "--cold-candidate-k",
+        type=int,
+        default=0,
+        help="Deprecated compatibility flag; budgets are derived from --intermediate-top-k.",
+    )
     parser.add_argument(
         "--rerank-top-k",
         type=int,
-        default=20,
-        help="Cross-encoder reranks only this many candidates by coarse retrieval score "
-        "(hot pass and merged final pass). Use <=0 to rerank the full candidate lists.",
+        default=0,
+        help="Cap hot-path reranker batch by coarse score (after sorting). "
+        "<=0 reranks the full hot coarse list (up to --intermediate-top-k).",
     )
     parser.add_argument("--min-hot-injected", type=int, default=3)
     parser.add_argument("--hot-lambda-threshold", type=float, default=0.10)
@@ -783,12 +772,24 @@ def main() -> None:
     parser.add_argument("--no-full-agent", dest="full_agent", action="store_false", default=True)
     parser.add_argument("--main-llm-model", default="deepseek-v4-pro")
     parser.add_argument("--contradiction-model", default="deepseek-v4-pro")
-    parser.add_argument("--reranker-backend", choices=["heuristic", "cross-encoder", "qwen"], default="qwen")
-    parser.add_argument("--reranker-model", default=DEFAULT_QWEN_RERANKER_MODEL)
+    parser.add_argument(
+        "--reranker-backend",
+        choices=["off", "heuristic", "cross-encoder", "qwen"],
+        default="off",
+        help="off: no reranking (hot scores pass through); heuristic: token+prior blend; "
+        "cross-encoder/qwen: neural reranker (requires --reranker-model unless qwen default path).",
+    )
+    parser.add_argument("--reranker-model", default=None)
     parser.add_argument("--embed-batch-size", type=int, default=64)
     parser.add_argument("--trace-events", dest="trace_events", action="store_true", default=True)
     parser.add_argument("--no-trace-events", dest="trace_events", action="store_false")
     args = parser.parse_args()
+    if args.hot_candidate_k > 0 or args.cold_candidate_k > 0:
+        progress(
+            "[agent-harness] ignoring deprecated --hot-candidate-k/--cold-candidate-k; "
+            "budgets use --intermediate-top-k "
+            "(hot-only=k, cold-triggered=1/4 hot + 3/4 cold)"
+        )
 
     data_path = args.data if args.data.is_absolute() else ROOT / args.data
     if not data_path.exists():
@@ -815,8 +816,6 @@ def main() -> None:
         final_top_k=args.final_top_k,
         hot_top_k=args.hot_top_k,
         cold_top_k=args.cold_top_k,
-        hot_candidate_k=args.hot_candidate_k,
-        cold_candidate_k=args.cold_candidate_k,
         rerank_top_k=args.rerank_top_k,
         min_hot_injected=args.min_hot_injected,
         hot_lambda_threshold=args.hot_lambda_threshold,
@@ -825,28 +824,31 @@ def main() -> None:
         contradiction_top_k=args.contradiction_top_k,
     )
 
-    print(f"[agent-harness] loading {data_path}")
+    progress(f"[agent-harness] loading {data_path}")
     records = json.loads(data_path.read_text())
     qtypes = {q.lower().replace("-", "_") for q in args.question_types} if args.question_types else None
+    qids = {str(q) for q in args.question_ids} if args.question_ids else None
     selected = select_records(
         records,
         n_questions=args.n_questions,
         multi_only=args.multi_only,
         single_only=args.single_only,
         question_types=qtypes,
+        question_ids=qids,
     )
-    print(
+    progress(
         f"[agent-harness] selected {len(selected)} questions "
-        f"(single_only={args.single_only}, multi_only={args.multi_only}, qtypes={sorted(qtypes) if qtypes else 'all'})"
+        f"(single_only={args.single_only}, multi_only={args.multi_only}, "
+        f"qtypes={sorted(qtypes) if qtypes else 'all'}, qids={sorted(qids) if qids else 'all'})"
     )
-    print(f"[agent-harness] dynamics={asdict(dynamics)} adoption={args.adoption_method}")
-    print(
+    progress(f"[agent-harness] dynamics={asdict(dynamics)} adoption={args.adoption_method}")
+    progress(
         "[agent-harness] half_life_days="
         f"volatile:{half_life_days(args.beta_volatile):.2f}, "
         f"stable:{half_life_days(args.beta_stable):.2f}, "
         f"identity:{half_life_days(args.beta_identity):.2f}"
     )
-    print(
+    progress(
         "[agent-harness] thresholds "
         f"hot_lambda>={args.hot_lambda_threshold} tau_h={args.tau_h} tau_r={args.tau_r} "
         f"hot_margin<{args.hot_margin_threshold} hot_entropy>={args.hot_entropy_threshold} "
@@ -861,7 +863,7 @@ def main() -> None:
         vector_cache_dir=args.embedding_cache_dir if args.embedding != "hashing" else None,
     )
 
-    methods = ["cosine", "lambda_embedding_adoption", "lambda_no_adoption", "hot_cold_rerank"]
+    methods = ["cosine", "lambda_embedding_adoption", "lambda_no_adoption"]
     if args.full_agent:
         methods.append("full_agent_memory")
     llm = None
@@ -897,8 +899,25 @@ def main() -> None:
             continue
         if question_time <= 0.0:
             question_time = max(s.time for s in sessions) + 1.0
+        if args.max_sessions > 0:
+            original_sessions = len(sessions)
+            sessions = sessions[: args.max_sessions]
+            allowed_session_ids = {s.session_id for s in sessions}
+            evidence_ids = {sid for sid in evidence_ids if sid in allowed_session_ids}
+            replay_turns = [turn for turn in replay_turns if turn.session_id in allowed_session_ids]
+            progress(
+                f"[agent-harness] Q{idx} debug cap sessions {original_sessions}->{len(sessions)} "
+                f"replay_turns_now={len(replay_turns)}"
+            )
+        if args.max_replay_turns > 0:
+            original_replay_turns = len(replay_turns)
+            replay_turns = replay_turns[: args.max_replay_turns]
+            progress(
+                f"[agent-harness] Q{idx} debug cap replay_turns "
+                f"{original_replay_turns}->{len(replay_turns)}"
+            )
         namespace = f"{qid}:{idx}"
-        print(
+        progress(
             f"[agent-harness] Q{idx}/{len(selected)} id={qid} "
             f"type={question_type(record)} sessions={len(sessions)} "
             f"replay_turns={len(replay_turns)} evidence={sorted(evidence_ids)}"
@@ -913,8 +932,24 @@ def main() -> None:
                 + [turn.memory_text for turn in replay_turns]
                 + [question]
             )
-            vectors = normalize_rows(embed_texts(embed_fn, texts, batch_size=args.embed_batch_size))
+            warm_started = time.perf_counter()
+            progress(
+                f"[agent-harness] Q{idx} embedding warmup start texts={len(texts)} "
+                f"batch_size={args.embed_batch_size}"
+            )
+            vectors = normalize_rows(
+                embed_texts_with_progress(
+                    embed_fn,
+                    texts,
+                    batch_size=args.embed_batch_size,
+                    label=f"Q{idx}/warmup",
+                )
+            )
             lookup = {text: vectors[i] for i, text in enumerate(texts)}
+            progress(
+                f"[agent-harness] Q{idx} embedding warmup done "
+                f"elapsed={time.perf_counter() - warm_started:.2f}s"
+            )
 
             def cached_embed(text: str):
                 return lookup.get(text) if text in lookup else np.asarray(embed_fn(text), dtype=float)
@@ -923,8 +958,11 @@ def main() -> None:
         else:
             active_embed_fn = embed_fn
 
-        results = {
-            "cosine": run_cosine_baseline(
+        results: dict[str, HarnessResult] = {}
+
+        method_started = time.perf_counter()
+        progress(f"[agent-harness] Q{idx} method=cosine start")
+        results["cosine"] = run_cosine_baseline(
                 replay_turns=replay_turns,
                 sessions=sessions,
                 question=question,
@@ -933,8 +971,15 @@ def main() -> None:
                 embed_fn=active_embed_fn,
                 dynamics=dynamics,
                 namespace=namespace + ":cosine",
-            ),
-            "lambda_embedding_adoption": run_lambda_harness(
+        )
+        progress(
+            f"[agent-harness] Q{idx} method=cosine done "
+            f"elapsed={time.perf_counter() - method_started:.2f}s"
+        )
+
+        method_started = time.perf_counter()
+        progress(f"[agent-harness] Q{idx} method=lambda_embedding_adoption start")
+        results["lambda_embedding_adoption"] = run_lambda_harness(
                 replay_turns=replay_turns,
                 sessions=sessions,
                 question=question,
@@ -947,8 +992,16 @@ def main() -> None:
                 adopt=True,
                 llm=llm,
                 trace_events=args.trace_events,
-            ),
-            "lambda_no_adoption": run_lambda_harness(
+        )
+        progress(
+            f"[agent-harness] Q{idx} method=lambda_embedding_adoption done "
+            f"elapsed={time.perf_counter() - method_started:.2f}s "
+            f"llm_calls={results['lambda_embedding_adoption'].replay_events.get('llm_calls', 0)}"
+        )
+
+        method_started = time.perf_counter()
+        progress(f"[agent-harness] Q{idx} method=lambda_no_adoption start")
+        results["lambda_no_adoption"] = run_lambda_harness(
                 replay_turns=replay_turns,
                 sessions=sessions,
                 question=question,
@@ -961,21 +1014,18 @@ def main() -> None:
                 adopt=False,
                 llm=None,
                 trace_events=args.trace_events,
-            ),
-            "hot_cold_rerank": run_hot_cold_rerank_harness(
-                sessions=sessions,
-                question=question,
-                question_time=question_time,
-                evidence_ids=evidence_ids,
-                embed_fn=active_embed_fn,
-                dynamics=dynamics,
-                adoption_method=args.adoption_method,
-                namespace=namespace + ":hot_cold_rerank",
-                reranker_backend=args.reranker_backend,
-                reranker_model=args.reranker_model,
-            ),
-        }
+        )
+        progress(
+            f"[agent-harness] Q{idx} method=lambda_no_adoption done "
+            f"elapsed={time.perf_counter() - method_started:.2f}s"
+        )
+
         if args.full_agent:
+            method_started = time.perf_counter()
+            progress(
+                f"[agent-harness] Q{idx} method=full_agent_memory start "
+                f"reranker_backend={args.reranker_backend}"
+            )
             results["full_agent_memory"] = run_full_agent_memory_harness(
                 replay_turns=replay_turns,
                 sessions=sessions,
@@ -991,6 +1041,11 @@ def main() -> None:
                 reranker_model=args.reranker_model,
                 trace_events=args.trace_events,
             )
+            progress(
+                f"[agent-harness] Q{idx} method=full_agent_memory done "
+                f"elapsed={time.perf_counter() - method_started:.2f}s "
+                f"llm_calls={results['full_agent_memory'].replay_events.get('llm_calls', 0)}"
+            )
 
         row: dict[str, Any] = {
             "question_id": qid,
@@ -1004,11 +1059,12 @@ def main() -> None:
         for method in methods:
             row[method] = asdict(results[method])
             m = results[method].session_metrics["k10"]
-            print(
+            progress(
                 f"  {method:25s} recall@{dynamics.final_top_k}="
                 f"{results[method].session_recall_at_k:.3f} "
                 f"k10_mrr={m['mrr']:.3f} k10_srr={m['srr']:.3f} "
-                f"adopted={results[method].replay_events.get('adopted', 0)}"
+                f"adopted={results[method].replay_events.get('adopted', 0)} "
+                f"cold_triggered={results[method].replay_events.get('cold_triggered', 0)}"
             )
         per_question.append(row)
 
@@ -1062,6 +1118,8 @@ def main() -> None:
                         "llm_calls",
                         "final_hot_candidates",
                         "final_cold_candidates",
+                        "final_hot_budget",
+                        "final_cold_budget",
                     )
                 },
             }
@@ -1075,14 +1133,15 @@ def main() -> None:
     suffix = "single" if args.single_only else ("multi" if args.multi_only else "all")
     out_json = outputs_dir / f"agent_harness_{suffix}.json"
     out_json.write_text(json.dumps(summary, indent=2, ensure_ascii=False))
-    print(f"\n[agent-harness] wrote {out_json}")
+    progress(f"\n[agent-harness] wrote {out_json}")
     for method in methods:
         agg = summary["aggregate"][method]
-        print(
+        progress(
             f"[agent-harness] {method:25s} recall@{dynamics.final_top_k}="
             f"{agg['session_recall_at_k']:.3f} "
             f"k10_mrr={agg['metrics']['k10']['mrr']:.3f} "
             f"k10_srr={agg['metrics']['k10']['srr']:.3f} "
+            f"cold_triggered={agg['replay_events'].get('cold_triggered', 0)} "
             f"llm_calls={agg['replay_events']['llm_calls']}"
         )
 
