@@ -4,6 +4,8 @@ A research-oriented **long-horizon agent memory** stack that combines **dense re
 
 This public repository **intentionally omits** benchmarks, datasets, and bulky experiment artifacts; if you need full eval harnesses, keep that tree locally alongside this checkout.
 
+**Notation:** Equations appear in fenced `text` code blocks (plain monospace) instead of LaTeX `$...$` / `$$...$$`, so they look the same on GitHub web, mobile, RSS-style readers, and raw exports without a math renderer.
+
 ---
 
 ## Design rationale (intuition)
@@ -37,9 +39,17 @@ On insert: `lambda_plus = 1.0`, `t_last_event = t_created = now`.
 
 For each record at query time `now`:
 
-$$
-\lambda^- = \min\left(1,\ \max\left(0,\ \lambda^+ \cdot e^{-\beta \cdot \Delta t}\right)\right),\quad \Delta t = now - t_{\text{last\_event}}
-$$
+```text
+λ⁻ = min( 1 , max( 0 , λ⁺ * exp(−β * Δt) ) )
+Δt = now − t_last_event
+```
+
+Same idea (ASCII operators only):
+
+```text
+lambda_minus = min(1.0, max(0.0, lambda_plus * exp(-beta * delta_t)))
+delta_t      = now - t_last_event
+```
 
 - **Larger β ⇒ faster forgetting** (`volatile` defaults ≫ `stable` / `identity`).
 - λ⁻ gates **hot membership** (vs. `DynamicsConfig.hot_lambda_threshold`) and **λ-aware retrieval scores**.
@@ -53,16 +63,29 @@ Implementation: `hawkes_agent.dynamics.decayed_lambda`, batched via `InMemoryVec
 Given cosine similarities `cos` and decayed intensities λ⁻, compute a batch **μ ∈ [μ_base, 1]** with `compute_mu`:
 
 - Normalize **λ²** into a probability mass, compute normalized entropy **ĥ** — flatter λ mass ⇒ larger **ĥ**;
-- $$
-  \mu = \mu_{\text{base}} + (1-\mu_{\text{base}})\sqrt{1-\hat{h}}
-  $$
-  **Intuition**: when many memories look similarly “hot,” trust geometry more; when mass concentrates on few items, amplify intensity modulation.
+- **μ mixing rule** (plain text):
+
+```text
+μ = μ_base + (1 − μ_base) · sqrt(1 − ĥ)
+```
+
+```text
+# ASCII-only variant
+mu = mu_base + (1 - mu_base) * sqrt(1 - h_hat)
+```
+
+**Intuition**: when many memories look similarly “hot,” trust geometry more; when mass concentrates on few items, amplify intensity modulation.
 
 Per-candidate score:
 
-$$
-\text{score}_i = \cos_i \cdot \bigl(\mu + (1-\mu)\cdot \lambda^-_i\bigr)
-$$
+```text
+score_i = cos_i * ( μ + (1 − μ) * λ⁻_i )
+```
+
+```text
+# ASCII-only variant
+score[i] = cos[i] * ( mu + (1 - mu) * lambda_minus[i] )
+```
 
 - Larger λ⁻ wins more mass under **`(1-μ)`**.
 - `cos_i` is clamped below by **`cosine_floor`**.
@@ -75,7 +98,7 @@ Implementation: `hawkes_agent.dynamics.recall_scores` via `_recall_from_records`
 ## Hot / Cold dual path
 
 1. **Split by λ⁻ vs. threshold**:
-   - **hot**: $\lambda^- \geq$ `hot_lambda_threshold`
+   - **hot**: **λ⁻ ≥** `hot_lambda_threshold`
    - **cold**: otherwise
 2. **`recall_hot_cold`**:
    - hot: λ-shaped scoring (`use_lambda=True`)
@@ -111,15 +134,30 @@ Default model path hints live in `hawkes_agent.config`; large weights stay under
    - `token_overlap`: overlap ratio;
    threshold **`theta_a`** yields adopted memory ids.
 3. **`reinforce`** for adopted items:
-   $$
-   \lambda^+_{\text{new}} = \lambda^- + (1-\lambda^-)\cdot s
-   $$
-   where **`s`** is the retrieval-stage Hawkes score (or equivalent) — `reinforce_lambda`.
+
+```text
+λ⁺_new = λ⁻ + (1 − λ⁻) · s
+```
+
+```text
+# ASCII-only
+lambda_plus_new = lambda_minus + (1 - lambda_minus) * s
+```
+
+where **`s`** is the retrieval-stage Hawkes score (or equivalent) — `reinforce_lambda`.
+
 4. **`suppress`** for contradicted ids (upstream supplies the list), using cosine-to-query as **`contradiction_similarity`**:
-   $$
-   \lambda^+_{\text{new}} = \lambda^- \cdot (1 - \texttt{clamp}(\text{contradiction\_similarity}))
-   $$
-   (`suppress_lambda`).  
+
+```text
+λ⁺_new = λ⁻ · (1 − clamp(contradiction_similarity,  min=0,  max=1))
+```
+
+```text
+# ASCII-only
+lambda_plus_new = lambda_minus * (1 - clamp(contradiction_similarity, lo=0, hi=1))
+```
+
+(`suppress_lambda`).  
    **`prescreen_contradiction_signal`** flags high-cosine but **non-adopted** neighbors for cheap contradiction checks (`theta_c`, `theta_a`, `contradiction_top_k`).
 
 Together: **retrieve → generate → (optional contradiction handling) → reinforce / suppress**, producing an observable λ trajectory.
