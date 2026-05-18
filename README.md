@@ -4,8 +4,6 @@ A research-oriented **long-horizon agent memory** stack that combines **dense re
 
 This public repository **intentionally omits** benchmarks, datasets, and bulky experiment artifacts; if you need full eval harnesses, keep that tree locally alongside this checkout.
 
-**Notation:** Equations appear in fenced `text` code blocks (plain monospace) instead of LaTeX `$...$` / `$$...$$`, so they look the same on GitHub web, mobile, RSS-style readers, and raw exports without a math renderer.
-
 ---
 
 ## Design rationale (intuition)
